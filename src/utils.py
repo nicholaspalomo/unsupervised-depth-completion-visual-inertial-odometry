@@ -15,6 +15,7 @@ import tf
 from tf import transformations as tfm
 
 import os
+import pathlib
 import glob
 import h5py
 from datetime import datetime
@@ -108,7 +109,9 @@ class Camera:
             
             # plot the second point cloud in the sequence and visualize in 3D
             point_clouds = point_clouds[~np.isnan(point_clouds)]
-            point_clouds = np.reshape(point_clouds, (-1, 3))
+            point_clouds = np.reshape(point_clouds, (-1, 4))
+            intensities = point_clouds[:, -1]
+            point_clouds = point_clouds[:, :3]
             points = np.hstack((point_clouds, np.zeros((point_clouds.shape[0], 1))))
             
             # project the point cloud to the image
@@ -133,13 +136,13 @@ class Camera:
             pc_img = pc_img[pc_img_mask_idx, :]
             
             pc_velo = points[pc_cam_pos_z_idx, :]
-            
+            intensities_camera_front = intensities[pc_cam_pos_z_idx]
+
             rgb = plt.cm.get_cmap('jet')
             colors = []
-            for img_point, velo_point in zip(pc_img, pc_velo[pc_img_mask_idx, :]):
-                velo_point[-1] = PointCloud.depth_color(np.linalg.norm(velo_point[:-1]), min_d=0, max_d=5)
+            for img_point, velo_point, intensity in zip(pc_img, pc_velo[pc_img_mask_idx, :], intensities_camera_front[pc_img_mask_idx]):
                 
-                color = rgb(velo_point[-1], bytes=True)
+                color = rgb(intensity, bytes=True)
                 color = list(color)
                 color = color[:-1]
                 colors.append(color[::-1])
@@ -160,10 +163,9 @@ class Camera:
             point_cloud.add_visualization()
             
             colors = []
-            for point in points:
-                point[-1] = PointCloud.depth_color(np.linalg.norm(point[:-1]), min_d=0, max_d=5)
+            for point, intensity in zip(points, intensities):
                 
-                color = rgb(point[-1], bytes=True)
+                color = rgb(intensity, bytes=True)
                 color = list(color)
                 color = color[:-1]
                 colors.append(color[::-1])
@@ -260,7 +262,7 @@ class LiDARCameraRosbagData:
         self.camera_image_topic = '/' + robot_name + '/' + camera_name + '/color/image_raw_throttle/compressed'
         self.camera_info_topic = '/' + robot_name + '/' + camera_name + '/color/camera_info' # '/husky1/camera_front/color/camera_info'
         self.lidar_topic = '/' + robot_name + '/velodyne_points' #TODO: handle the case for multiple velodynes
-        self.lidar_out_filename = os.getcwd() + '/data.h5' #TODO: make this a function parameter
+        self.lidar_out_filename = os.getcwd() + '/costar.h5' #TODO: make this a function parameter
 
     def get_bag_names(self, path):
 
@@ -388,6 +390,8 @@ class LiDARCameraRosbagData:
                         pts = np.array(
                             list(pc2.read_points(msg, skip_nans=True, field_names=("x", "y", "z")))
                             )
+                        pts = np.hstack((pts, np.zeros((pts.shape[0],1))))
+                        pts[:, -1] = PointCloud.depth_color(np.linalg.norm(pts[:, :-1], axis=1), min_d=0, max_d=5)
 
                         lidar_idx = np.where((image_timestamp_dataset[:] - t.to_sec() < 0) * (image_timestamp_dataset[:] - t.to_sec() > -0.2))[0] # 0.2s here is a heuristic
 
@@ -416,7 +420,7 @@ class LiDARCameraRosbagData:
 def main(args):
 
     camera = Camera(args.path, args.robot, args.camera)
-    if args.create_dataset == 'True':
+    if args.create_dataset == True:
         # creat the training dataset and write it to file
         util = LiDARCameraRosbagData(args.robot, args.camera)
         util.create_dataset_from_vision_lidar_tf(args.path, camera, int(args.max_idx))
@@ -430,13 +434,13 @@ if __name__ == "__main__":
     # TODO: add here an example of running this module with input arguments
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--robot", help="robot name, e.g. husky1", required=True)
-    parser.add_argument("--camera", choices=["camera_front", "camera_left", "camera_right"], help="name of camera", required=True)
-    parser.add_argument("--path", help="Path to bag files", required=True)
-    parser.add_argument("--create_dataset", help="Create h5py file", required=True)
-    parser.add_argument("--data_path", help="Directory to H5 file with dataset", required=False)
-    parser.add_argument("--img_idx", help="Index of image in dataset", required=True)
-    parser.add_argument("--max_idx", help="Maximum index to extract from rosbags", required=False)
+    parser.add_argument("--robot", help="robot name, e.g. husky1", required=False, type=str, default="spot1")
+    parser.add_argument("--camera", choices=["camera_front", "camera_left", "camera_right"], help="name of camera", required=False, type=str, default="camera_front")
+    parser.add_argument("--path", help="Path to bag files", required=False, type=str, default=os.path.join(pathlib.Path(__file__).parent.absolute(), "bags"))
+    parser.add_argument("--create_dataset", help="Create h5py file", required=False, type=bool, default=True)
+    parser.add_argument("--data_path", help="Directory to H5 file with dataset", required=False, type=str, default=os.path.join(pathlib.Path(__file__).parent.absolute(), "../costar.h5"))
+    parser.add_argument("--img_idx", help="Index of image in dataset", required=False, type=int, default=0)
+    parser.add_argument("--max_idx", help="Maximum index to extract from rosbags", required=False, type=int, default=10)
     args = parser.parse_args()
 
     # TODO:
