@@ -141,7 +141,7 @@ class Camera:
             rgb = plt.cm.get_cmap('jet')
             colors = []
             for img_point, velo_point, intensity in zip(pc_img, pc_velo[pc_img_mask_idx, :], intensities_camera_front[pc_img_mask_idx]):
-                
+
                 color = rgb(intensity, bytes=True)
                 color = list(color)
                 color = color[:-1]
@@ -388,10 +388,9 @@ class LiDARCameraRosbagData:
                             flag = False
 
                         pts = np.array(
-                            list(pc2.read_points(msg, skip_nans=True, field_names=("x", "y", "z")))
+                            list(pc2.read_points(msg, skip_nans=True, field_names=("x", "y", "z", "intensity")))
                             )
-                        pts = np.hstack((pts, np.zeros((pts.shape[0],1))))
-                        pts[:, -1] = PointCloud.depth_color(np.linalg.norm(pts[:, :-1], axis=1), min_d=0, max_d=5)
+                        pts[:, -1] = PointCloud.depth_color(np.linalg.norm(pts[:, :-1], axis=1), min_d=0, max_d=10.)
 
                         lidar_idx = np.where((image_timestamp_dataset[:] - t.to_sec() < 0) * (image_timestamp_dataset[:] - t.to_sec() > -0.2))[0] # 0.2s here is a heuristic
 
