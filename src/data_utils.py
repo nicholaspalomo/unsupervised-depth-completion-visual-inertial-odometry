@@ -18,6 +18,7 @@ import os
 import numpy as np
 from PIL import Image
 from scipy.interpolate import LinearNDInterpolator
+import cv2
 
 
 def log(s, filepath=None, to_console=True):
@@ -62,6 +63,44 @@ def read_paths(filepath):
       path_list.append(path)
 
   return path_list
+
+def create_depth_with_validity_map(pc, h, w, K, debug=False):
+  '''
+  converts the point cloud to a sparse depth map
+
+  Args:
+    pc : numpy
+      list of points in point cloud
+
+  Returns:
+    numpy : depth map
+    numpy : binary validity map for available depth measurement locations
+  '''
+
+  max_depth = 10 # maximum depth of 10 m for lidar measurements
+  pc_img = np.matmul(pc[:,:3], K.T)
+  pc_img = pc_img / pc_img[:, -1, None]
+  pc_intensity_16bit = np.linalg.norm(pc[:,:3], axis=1)
+  pc_intensity_16bit = np.clip(pc_intensity_16bit, 0., max_depth)
+  pc_intensity_16bit /= max_depth
+
+  # apply Gaussian filter to z?
+  z = np.zeros((h, w), dtype=np.float32)
+  for i, j in enumerate(pc_img):
+    u = min(np.int_(j[1]), h-1)
+    v = min(np.int_(j[0]), w-1)
+    z[u, v] = pc_intensity_16bit[i]
+  z = cv2.blur(z, (1,1))
+  v = z.astype(np.float32)
+  v[z > 0] = 1.0
+
+  if debug:
+    cv2.imshow('depth image', z)
+    cv2.waitKey(0) 
+    cv2.destroyAllWindows()
+  
+  return z, v
+  
 
 def load_depth_with_validity_map(path):
   '''
