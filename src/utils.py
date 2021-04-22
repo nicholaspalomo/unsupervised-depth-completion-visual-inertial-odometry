@@ -260,7 +260,9 @@ class LiDARCameraRosbagData:
         self.robot_name = robot_name
         self.camera_name = camera_name
         self.camera_image_topic = '/' + robot_name + '/' + camera_name + '/color/image_raw_throttle/compressed'
+        self.camera_depth_image_topic = '/' + robot_name + '/' + camera_name + '/aligned_depth_to_color/image_raw_throttle/compressedDepth'
         self.camera_info_topic = '/' + robot_name + '/' + camera_name + '/color/camera_info' # '/husky1/camera_front/color/camera_info'
+        self.camera_depth_info_topic = '/' + robot_name + '/' + camera_name + '/aligned_depth_to_color/camera_info'
         self.lidar_topic = '/' + robot_name + '/velodyne_points' #TODO: handle the case for multiple velodynes
         self.lidar_out_filename = os.getcwd() + '/costar.h5' #TODO: make this a function parameter
 
@@ -323,6 +325,10 @@ class LiDARCameraRosbagData:
 
         camera_intrinsics_dataset = image_group.create_dataset("intrinsics", data=np.zeros((9,), dtype=np.float_), compression="gzip", chunks=True, maxshape=(9,))
 
+        depth_camera_resolution_dataset = image_group.create_dataset("depth_resolution", data=np.zeros((2,), dtype=np.int_), compression="gzip", chunks=True, maxshape=(2,))
+
+        depth_camera_intrinsics_dataset = image_group.create_dataset("depth_intrinsics", data=np.zeros((9,), dtype=np.float_), compression="gzip", chunks=True, maxshape=(9,))
+
         image_timestamp_dataset = image_group.create_dataset("image_timestamp", data=np.empty((0,), dtype=np.float_), compression="gzip", chunks=True, maxshape=(None,))
 
         image_idx_dataset = image_group.create_dataset("image_idx", data=np.empty((0,), dtype=np.int_), compression="gzip", chunks=True, maxshape=(None,))
@@ -342,6 +348,17 @@ class LiDARCameraRosbagData:
                     rgb_image_dataset = image_group.create_dataset("image", data=np.empty((0, h*w, 3), dtype=np.uint8), compression="gzip", chunks=True, maxshape=(None,h*w,3))
 
                     break
+
+                for topic, msg, t in bag.read_messages(topics=self.camera_depth_info_topic):
+                    depth_h = msg.height
+                    depth_w = msg.width
+                    depth_camera_resolution_dataset[:] = np.array([depth_h, depth_w])
+
+                    depth_camera_intrinsics_dataset[:] = np.array(msg.K)
+
+                    depth_image_dataset = image_group.create_dataset("depth_image", data=np.empty((0, depth_h*depth_w), dtype=np.uint8), compression="gzip", chunks=True, maxshape=(None,depth_h*depth_w))
+
+                    break
                 
                 for topic, msg, t in bag.read_messages(topics=self.camera_image_topic):
                     if count < max_idx:
@@ -355,6 +372,20 @@ class LiDARCameraRosbagData:
 
                         # cv2.imwrite(os.path.join(os.getcwd() + "/img", "frame%06i.png" % count), img)
                         print("Wrote image {}".format(count))
+                        count += 1
+
+                count = 0
+                for topic, msg, t in bag.read_messages(topics=self.camera_depth_image_topic):
+                    if count < max_idx:
+                        depth_image_dataset.resize(depth_image_dataset.shape[0]+1, axis=0)
+                        img = np.frombuffer(msg.data[12:], dtype=np.uint8)
+                        img = cv2.imdecode(img, cv2.IMREAD_UNCHANGED)
+                        depth_image_dataset[-1, :] = np.reshape(img, (depth_h*depth_w))
+
+                        cv2.imwrite(
+                            os.path.join(os.getcwd() + "/img", "depth_frame%06i.png" % count), 
+                            np.reshape(img, (depth_h, -1)))
+                        print("Wrote depth image {}".format(count))
                         count += 1
 
         rgb_image_dataset = rgb_image_dataset[np.argsort(image_timestamp_dataset[:]),:,:]
@@ -439,7 +470,7 @@ if __name__ == "__main__":
     parser.add_argument("--create_dataset", help="Create h5py file", required=False, type=bool, default=True)
     parser.add_argument("--data_path", help="Directory to H5 file with dataset", required=False, type=str, default=os.path.join(pathlib.Path(__file__).parent.absolute(), "../costar.h5"))
     parser.add_argument("--img_idx", help="Index of image in dataset", required=False, type=int, default=0)
-    parser.add_argument("--max_idx", help="Maximum index to extract from rosbags", required=False, type=int, default=10)
+    parser.add_argument("--max_idx", help="Maximum index to extract from rosbags", required=False, type=int, default=5)
     args = parser.parse_args()
 
     # TODO:
