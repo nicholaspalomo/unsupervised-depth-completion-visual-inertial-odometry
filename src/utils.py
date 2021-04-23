@@ -421,7 +421,7 @@ class LiDARCameraRosbagData:
                         pts = np.array(
                             list(pc2.read_points(msg, skip_nans=True, field_names=("x", "y", "z", "intensity")))
                             )
-                        pts[:, -1] = PointCloud.depth_color(np.linalg.norm(pts[:, :-1], axis=1), min_d=0, max_d=10.)
+                        # pts[:, -1] = PointCloud.depth_color(np.linalg.norm(pts[:, :-1], axis=1), min_d=0, max_d=10.)
 
                         lidar_idx = np.where((image_timestamp_dataset[:] - t.to_sec() < 0) * (image_timestamp_dataset[:] - t.to_sec() > -0.2))[0] # 0.2s here is a heuristic
 
