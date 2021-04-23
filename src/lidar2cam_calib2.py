@@ -112,9 +112,6 @@ def compute_gradients(validity_map, depth_map, neighborhood=3, thresh=0.2, apply
     grad_mag = grad_mag / np.max(grad_mag)
     # grad_mag[grad_mag < thresh] = 0.
 
-    if apply_vm:
-        grad_mag = np.multiply(grad_mag, validity_map)
-
     # strengthen edges
     direction = np.zeros(grad_mag.shape).astype(np.int)
     angles = np.zeros(grad_mag.shape)
@@ -148,6 +145,10 @@ def compute_gradients(validity_map, depth_map, neighborhood=3, thresh=0.2, apply
                     else:
                         grad_mag[u_next, v_next] = 0.
                         condition = False
+
+    if apply_vm:
+        grad_mag = np.multiply(grad_mag, validity_map)
+        angles = np.multiply(angles, validity_map)
 
     return grad_x, grad_y, grad_mag / np.max(grad_mag) * 255, angles
 
@@ -264,7 +265,7 @@ def visualize_lidar_projection(lidar, image, K, T):
     plt.close()
 
 def main(args):
-    debug = False
+    debug = True
     INDEX = 0
 
     with h5py.File(args.data_file, 'r') as h5:
@@ -320,7 +321,7 @@ def main(args):
         plt.show()
 
     # compute depth map gradients
-    grad_x_depth, grad_y_depth, grad_mag_depth, dir_depth = compute_gradients(validity_map, depth_map_interp, neighborhood=3, apply_vm=True, thresh=0.2)
+    grad_x_depth, grad_y_depth, grad_mag_depth, dir_depth = compute_gradients(validity_map, depth_map_interp, neighborhood=3, apply_vm=True, thresh=0.1)
 
     if debug:
         plt.subplot(131),plt.imshow(grad_x_depth, cmap='gray'),plt.title('grad_x')
@@ -348,13 +349,19 @@ def main(args):
         plt.xticks([]), plt.yticks([])
         plt.show()
 
+        plt.subplot(121),plt.imshow(dir_depth),plt.title('depth_dir')
+        plt.xticks([]), plt.yticks([])
+        plt.subplot(122),plt.imshow(dir_image),plt.title('image_dir')
+        plt.xticks([]), plt.yticks([])
+        plt.show()
+
     # Get descriptors - find the num_descriptors number of regions with the greatest number of activated pixels between the depth image and the RGB image
     descriptors_depth, descriptors_image = get_descriptors(grad_mag_depth, grad_mag_image, dir_depth, dir_image, depth_map=depth_map, image=gray, num_descriptors=10, neighborhood=25)
 
     # compute the relative warp between the camera and the lidar
-    n = 2
+    n = 3
     rot = np.concatenate((np.pi * 0.05 * np.linspace(0., 1.0, num=n+1), np.zeros(1)))
-    tran = np.concatenate((0.05 * np.linspace(-1.0, 0., num=n+1), np.zeros(1)))
+    tran = np.concatenate((0.1 * np.linspace(-1.0, 0., num=n+1), np.zeros(1)))
 
     r0, p0, yaw0 = rotmat2rpy(tf_velo2cam[:3, :3])
     r, yaw = 0, 0
