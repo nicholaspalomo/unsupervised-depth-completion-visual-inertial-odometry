@@ -9,6 +9,7 @@ import os
 import pathlib
 import math
 from datetime import datetime
+import open3d as o3d
 
 import sys
 sys.path.append('.')
@@ -70,7 +71,7 @@ def create_depth_with_validity_map(pc, h, w, K, T, debug=False):
         cv2.waitKey(0) 
         cv2.destroyAllWindows()
     
-    return z, v
+    return z, v, pc_
 
 def interpolate_depth(depth_map, validity_map, log_space=False):
 
@@ -264,6 +265,49 @@ def visualize_lidar_projection(lidar, image, K, T):
     plt.gcf().savefig(os.path.dirname(os.path.abspath(__file__)) + datetime.now().strftime("/%d%m%Y%H%M%S"), dpi=300)
     plt.close()
 
+def compute_surface_normal_map(pc, K, image, debug=False):
+    # NOTE: expects pc in the coordinate frame of the camera optical plane
+
+    cloud = o3d.geometry.PointCloud()
+    cloud.points = o3d.utility.Vector3dVector(pc[:,:3])
+
+    cloud.estimate_normals(
+        search_param=o3d.geometry.KDTreeSearchParamHybrid(radius=100.0,
+        max_nn=50))
+
+    if debug:
+        o3d.visualization.draw_geometries([cloud])
+
+    normals_cam = np.asarray(cloud.normals)
+    normals_cam /= normals_cam[:, 2, None]
+
+    normals_cam_mag = np.linalg.norm(normals_cam[:,:2], axis=1)
+    normals_cam_mag /= np.max(normals_cam_mag)
+
+    pc_img = np.matmul(pc[:,:3], K.T)
+    pc_img /= pc_img[:,2,None]
+
+    rgb = plt.cm.get_cmap('jet')
+    colors = []
+    for img_point, intensity in zip(pc_img, normals_cam_mag):
+
+        color = rgb(intensity, bytes=True)
+        color = list(color)
+        color = color[:-1]
+        colors.append(color[::-1])
+        
+        cv2.circle(img=image,
+            center=(np.int_(img_point[0]), np.int_(img_point[1])),
+            radius=1,
+            color=np.float_(color),
+            thickness=-1)
+        
+    plt.imshow(image)
+    plt.gcf().savefig(os.path.dirname(os.path.abspath(__file__)) + datetime.now().strftime("/%d%m%Y%H%M%S"), dpi=300)
+    plt.close()
+
+    return normals_cam[:, :2], normals_cam_mag
+
 def main(args):
     debug = True
     INDEX = 0
@@ -287,8 +331,10 @@ def main(args):
 
     gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
 
-    depth_map, validity_map = create_depth_with_validity_map(lidar, h, w, K, tf_velo2cam, debug=False)
+    depth_map, validity_map, pc = create_depth_with_validity_map(lidar, h, w, K, tf_velo2cam, debug=False)
     depth_map /= np.max(depth_map)
+
+    surface_normal_map, _ = compute_surface_normal_map(pc, K, image, debug=False)
 
     gray = gray.astype(float) / np.max(gray.astype(float))
     gray_blur = cv2.blur(gray, (5,5))
@@ -332,7 +378,7 @@ def main(args):
         plt.xticks([]), plt.yticks([])
         plt.show()
 
-    grad_x_image, grad_y_image, grad_mag_image, dir_image = compute_gradients(validity_map, gray, neighborhood=3, thresh=0.4)
+    grad_x_image, grad_y_image, grad_mag_image, dir_image = compute_gradients(validity_map, gray_blur, neighborhood=3, thresh=0.4)
 
     if debug:
         plt.subplot(231),plt.imshow(grad_x_depth, cmap='gray'),plt.title('grad_x')
@@ -389,7 +435,7 @@ def main(args):
             T[:3, :3] = rpy2rotmat(rN, pN, yawN)
             T[:3, -1] = np.array([xN, yN, zN])
 
-            depth_map, validity_map = create_depth_with_validity_map(lidar, h, w, K, T, debug=False)
+            depth_map, validity_map, _ = create_depth_with_validity_map(lidar, h, w, K, T, debug=False)
 
             depth_map /= np.max(depth_map)
 
