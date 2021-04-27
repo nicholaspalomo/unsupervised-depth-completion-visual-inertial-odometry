@@ -1,19 +1,14 @@
 #!/bin/bash
 
-mkdir -p data
-bash ./bash/raw_data_downloader.sh # Download and unzip raw kitti data
+mkdir -p costar_data
 
-wget https://s3.eu-central-1.amazonaws.com/avg-kitti/data_depth_velodyne.zip -P data
-wget https://s3.eu-central-1.amazonaws.com/avg-kitti/data_depth_selection.zip -P data
-wget https://s3.eu-central-1.amazonaws.com/avg-kitti/data_depth_annotated.zip -P data
-
-mkdir -p data/kitti_depth_completion
-mkdir -p data/kitti_depth_completion/train_val_split
-mkdir -p data/kitti_depth_completion/train_val_split/sparse_depth
-mkdir -p data/kitti_depth_completion/train_val_split/ground_truth
-mkdir -p data/kitti_depth_completion/validation
-mkdir -p data/kitti_depth_completion/testing
-mkdir -p data/kitti_depth_completion/tmp
+mkdir -p costar_data/kitti_depth_completion
+mkdir -p costar_data/kitti_depth_completion/train_val_split
+mkdir -p costar_data/kitti_depth_completion/train_val_split/sparse_depth
+mkdir -p costar_data/kitti_depth_completion/train_val_split/ground_truth
+mkdir -p costar_data/kitti_depth_completion/validation
+mkdir -p costar_data/kitti_depth_completion/testing
+mkdir -p costar_data/kitti_depth_completion/tmp
 
 unzip data/data_depth_velodyne.zip -d data/kitti_depth_completion/train_val_split/sparse_depth
 unzip data/data_depth_annotated.zip -d data/kitti_depth_completion/train_val_split/ground_truth

@@ -2,7 +2,7 @@ import argparse
 import cv2
 from matplotlib import pyplot as plt
 import numpy as np
-from scipy.interpolate import LinearNDInterpolator, CloughTocher2DInterpolator
+from scipy.interpolate import LinearNDInterpolator, CloughTocher2DInterpolator, griddata
 from scipy.spatial import Delaunay
 import h5py
 import os
@@ -10,6 +10,7 @@ import pathlib
 import math
 from datetime import datetime
 import open3d as o3d
+import operator
 
 import sys
 sys.path.append('.')
@@ -73,7 +74,7 @@ def create_depth_with_validity_map(pc, h, w, K, T, debug=False):
     
     return z, v, pc_
 
-def interpolate_depth(depth_map, validity_map, log_space=False):
+def interpolate_depth(depth_map, validity_map, log_space=True):
 
     assert depth_map.ndim == 2 and validity_map.ndim == 2
     rows, cols = depth_map.shape
@@ -90,6 +91,9 @@ def interpolate_depth(depth_map, validity_map, log_space=False):
     query_row_idx, query_col_idx = np.meshgrid(np.arange(rows), np.arange(cols), indexing='ij')
     query_coord = np.stack([query_row_idx.ravel(), query_col_idx.ravel()], axis=1)
     Z = interpolator(query_coord).reshape([rows, cols])
+
+    # Z = griddata(query_coord, depth_values, query_coord).reshape([rows, cols])
+
     if log_space:
         Z = np.exp(Z)
         Z[Z < 1e-1] = 0.0
@@ -268,6 +272,8 @@ def visualize_lidar_projection(lidar, image, K, T):
 def compute_surface_normal_map(pc, K, image, debug=False):
     # NOTE: expects pc in the coordinate frame of the camera optical plane
 
+    visualize_lidar_projection(pc, image, K, np.eye(4))
+
     cloud = o3d.geometry.PointCloud()
     cloud.points = o3d.utility.Vector3dVector(pc[:,:3])
 
@@ -334,7 +340,7 @@ def main(args):
     depth_map, validity_map, pc = create_depth_with_validity_map(lidar, h, w, K, tf_velo2cam, debug=False)
     depth_map /= np.max(depth_map)
 
-    surface_normal_map, _ = compute_surface_normal_map(pc, K, image, debug=False)
+    # surface_normal_map, _ = compute_surface_normal_map(pc, K, image, debug=False)
 
     gray = gray.astype(float) / np.max(gray.astype(float))
     gray_blur = cv2.blur(gray, (5,5))
@@ -449,7 +455,9 @@ def main(args):
 
             mse = 0
             for descriptor_depth, descriptor_image in zip(descriptors_depth, descriptors_image):
-                mse += np.sum((descriptor_depth - descriptor_image)**2)
+                diff = descriptor_depth - descriptor_image
+                diff = diff[diff > 0]
+                mse += np.sum(diff**2)
 
             result = np.array([rN, pN, yawN, xN, yN, zN, mse**0.5])
             params.append(result)
@@ -459,6 +467,17 @@ def main(args):
             print("r, p, y: {}, {}, {}. x, y, z: {}, {}, {}. MSE: {}".format(rN, pN, yawN, xN, yN, zN, mse**0.5))
 
     params = np.array(params)
+
+    # Plot the cost vs the parameters
+    plt.subplot(211)
+    plt.plot(params[:, 5], params[:, -1])
+    plt.title('Loss vs z-distance')
+    
+    plt.subplot(212)
+    plt.plot(params[:, 1], params[:, -1])
+    plt.title('Loss vs pitch offset (p)')
+    plt.show()
+
     min_mse_idx = np.argmin(params[:, -1], axis=0)
     r, p, yaw, x, y, z = list(params[min_mse_idx, :-1])
     T = np.zeros((4,4))
