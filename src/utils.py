@@ -75,7 +75,7 @@ class Camera:
             for topic, msg, t in bag.read_messages(["/tf_static"]):
                 for tf_msg in msg.transforms:
                     tf_msg.header.stamp = rospy.Time(0)
-                    print("frame_id: {} | child_frame_id: {}".format(tf_msg.header.frame_id, tf_msg.child_frame_id))
+                    # print("frame_id: {} | child_frame_id: {}".format(tf_msg.header.frame_id, tf_msg.child_frame_id))
                     transformer.setTransform(tf_msg)
         print("TF tree constructed")
 
@@ -84,7 +84,7 @@ class Camera:
     def get_tf_lidar2cam(self, frame_id):
 
         position, orientation = self.transformer.lookupTransform(
-            'spot2/builtin_camera_rear/camera_color_optical_frame',
+            'spot1/builtin_camera_rear/camera_color_optical_frame',
             frame_id,
             rospy.Time(0)
         )
@@ -334,7 +334,7 @@ class LiDARCameraRosbagData:
 
                     count += 1
 
-    def create_dataset_from_vision_lidar_tf(self, path, camera, max_idx=np.inf):
+    def create_dataset_from_vision_lidar_tf(self, path, camera, max_idx=100):
         # TODO: Create multiple groups:
         # 1. Raw RGB image values FOR A SINGLE CAMERA FEED
         #   - RGB values
@@ -361,9 +361,9 @@ class LiDARCameraRosbagData:
 
         depth_camera_intrinsics_dataset = image_group.create_dataset("depth_intrinsics", data=np.zeros((9,), dtype=np.float_), compression="gzip", chunks=True, maxshape=(9,))
 
-        image_timestamp_dataset = image_group.create_dataset("image_timestamp", data=np.empty((0,), dtype=np.float_), compression="gzip", chunks=True, maxshape=(None,))
+        image_timestamp_dataset = image_group.create_dataset("image_timestamp", data=np.empty((max_idx,), dtype=np.float_), compression="gzip", chunks=True, maxshape=(max_idx,))
 
-        image_idx_dataset = image_group.create_dataset("image_idx", data=np.empty((0,), dtype=np.int_), compression="gzip", chunks=True, maxshape=(None,))
+        image_idx_dataset = image_group.create_dataset("image_idx", data=np.empty((max_idx,), dtype=np.int_), compression="gzip", chunks=True, maxshape=(max_idx,))
 
         # TODO: For now, only holds 1 bag of images
         count = 0
@@ -377,7 +377,7 @@ class LiDARCameraRosbagData:
 
                     camera_intrinsics_dataset[:] = np.array(msg.K)
 
-                    rgb_image_dataset = image_group.create_dataset("image", data=np.empty((0, h*w, 3), dtype=np.uint8), compression="gzip", chunks=True, maxshape=(None,h*w,3))
+                    rgb_image_dataset = image_group.create_dataset("image", data=np.empty((max_idx, h*w, 3), dtype=np.uint8), compression="gzip", chunks=True, maxshape=(max_idx,h*w,3))
 
                     break
 
@@ -394,13 +394,13 @@ class LiDARCameraRosbagData:
                 
                 for topic, msg, t in bag.read_messages(topics=self.camera_image_topic):
                     if count < max_idx:
-                        rgb_image_dataset.resize(rgb_image_dataset.shape[0]+1, axis=0)
+                        # rgb_image_dataset.resize(rgb_image_dataset.shape[0]+1, axis=0)
                         img = np.frombuffer(msg.data, dtype=np.uint8)
                         img = cv2.imdecode(img, cv2.IMREAD_COLOR)
-                        rgb_image_dataset[-1, :, :] = np.reshape(img, (-1, 3))
+                        rgb_image_dataset[count, :, :] = np.reshape(img, (-1, 3))
 
-                        image_timestamp_dataset.resize(image_timestamp_dataset.shape[0]+1, axis=0)
-                        image_timestamp_dataset[-1] = t.to_sec()
+                        # image_timestamp_dataset.resize(image_timestamp_dataset.shape[0]+1, axis=0)
+                        image_timestamp_dataset[count] = t.to_sec()
 
                         cv2.imwrite(os.path.join(os.getcwd() + "/img", "frame%06i.png" % count), img)
                         print("Wrote image {}".format(count))
@@ -423,7 +423,7 @@ class LiDARCameraRosbagData:
         rgb_image_dataset = rgb_image_dataset[np.argsort(image_timestamp_dataset[:]),:,:]
         image_timestamp_dataset = image_timestamp_dataset[np.argsort(image_timestamp_dataset[:])]
         
-        image_idx_dataset.resize(image_timestamp_dataset[:].shape[0], axis=0)
+        # image_idx_dataset.resize(image_timestamp_dataset[:].shape[0], axis=0)
         image_idx_dataset[:] = np.array(range(image_idx_dataset.shape[0]))
 
         lidar_group = hf.create_group("lidar")
@@ -497,13 +497,13 @@ if __name__ == "__main__":
     # TODO: add here an example of running this module with input arguments
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--robot", help="robot name, e.g. husky1", required=False, type=str, default="spot2")
+    parser.add_argument("--robot", help="robot name, e.g. husky1", required=False, type=str, default="spot1")
     parser.add_argument("--camera", choices=["camera_front", "camera_left", "camera_right"], help="name of camera", required=False, type=str, default="camera_front")
     parser.add_argument("--path", help="Path to bag files", required=False, type=str, default=os.path.join(pathlib.Path(__file__).parent.absolute(), "bags"))
     parser.add_argument("--create_dataset", help="Create h5py file", required=False, type=bool, default=True)
     parser.add_argument("--data_path", help="Directory to H5 file with dataset", required=False, type=str, default=os.path.join(pathlib.Path(__file__).parent.absolute(), "../costar.h5"))
     parser.add_argument("--img_idx", help="Index of image in dataset", required=False, type=int, default=0)
-    parser.add_argument("--max_idx", help="Maximum index to extract from rosbags", required=False, type=int, default=900)
+    parser.add_argument("--max_idx", help="Maximum index to extract from rosbags", required=False, type=int, default=3000)
     args = parser.parse_args()
 
     # TODO:
