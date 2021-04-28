@@ -369,7 +369,7 @@ class LiDARCameraRosbagData:
         count = 0
         for vision_bag_name in self.filenames["vision"]:
             with rosbag.Bag(vision_bag_name, "r") as bag:
-                LiDARCameraRosbagData.print_topic_names(bag)
+                # LiDARCameraRosbagData.print_topic_names(bag)
                 for topic, msg, t in bag.read_messages(topics=self.camera_info_topic):
                     h = msg.height
                     w = msg.width
@@ -503,7 +503,7 @@ if __name__ == "__main__":
     parser.add_argument("--create_dataset", help="Create h5py file", required=False, type=bool, default=True)
     parser.add_argument("--data_path", help="Directory to H5 file with dataset", required=False, type=str, default=os.path.join(pathlib.Path(__file__).parent.absolute(), "../costar.h5"))
     parser.add_argument("--img_idx", help="Index of image in dataset", required=False, type=int, default=0)
-    parser.add_argument("--max_idx", help="Maximum index to extract from rosbags", required=False, type=int, default=200)
+    parser.add_argument("--max_idx", help="Maximum index to extract from rosbags", required=False, type=int, default=900)
     args = parser.parse_args()
 
     # TODO:
