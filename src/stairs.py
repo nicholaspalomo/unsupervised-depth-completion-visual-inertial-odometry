@@ -11,6 +11,8 @@ import math
 from datetime import datetime
 import open3d as o3d
 from scipy.optimize import NonlinearConstraint, minimize
+import sklearn
+from sklearn import cluster
 
 # Need to keep track of the frame transformations as the robot moves in order to have the point cloud represented in the same frame
 COSTAR_DATA_DIRPATH = os.path.join(os.path.dirname(__file__), '..', 'costar.h5')
@@ -29,7 +31,7 @@ def plot_point_cloud(point_clouds):
 
     o3d.visualization.draw_geometries([cloud])
 
-def get_normalized_diff_vectors(lidar, d1=0.02, d2=0.04, debug=False):
+def get_normalized_diff_vectors(lidar, d1=0.02, d2=0.07, n_clusters=2, debug=False):
 
     neighbors = dict()
     for i, point in enumerate(lidar):
@@ -41,9 +43,9 @@ def get_normalized_diff_vectors(lidar, d1=0.02, d2=0.04, debug=False):
     norm_diff_vec = np.zeros((NUM_DIFF_VECTORS, 3))
     lidar_idx = [None] * NUM_DIFF_VECTORS
     subsampled_lidar = np.zeros((NUM_DIFF_VECTORS, 3))
+    keys = list(neighbors.keys())
     k = 0
     while k < NUM_DIFF_VECTORS:
-        keys = list(neighbors.keys())
         m = np.random.randint(0, len(keys))
         i = keys[m]
 
@@ -56,11 +58,17 @@ def get_normalized_diff_vectors(lidar, d1=0.02, d2=0.04, debug=False):
         norm_diff_vec[k, :] = (pi - pj) / np.linalg.norm(pi - pj)
         k += 1
 
+    # cluster the normalized difference vectors
+    kmeans = cluster.KMeans(n_clusters=n_clusters, init='k-means++', n_init=10, max_iter=500, tol=0.0001, verbose=1).fit(norm_diff_vec)
+
     if debug:
-        # Plot the normalized difference vectors
+        # Plot the clustered normalized difference vectors
         fig = plt.figure()
         ax = fig.add_subplot(projection='3d')
-        ax.scatter(norm_diff_vec[:,0], norm_diff_vec[:,1], norm_diff_vec[:,2])
+
+        colors = {0 : 'r', 1 : 'g', 2 : 'b', 3 : 'm'}
+        for label in range(np.max(kmeans.labels_)+1):
+            ax.scatter(norm_diff_vec[kmeans.labels_==label,0], norm_diff_vec[kmeans.labels_==label,1], norm_diff_vec[kmeans.labels_==label,2], c=colors[label])
 
         ax.set_xlabel('x')
         ax.set_xlabel('y')
@@ -71,7 +79,7 @@ def get_normalized_diff_vectors(lidar, d1=0.02, d2=0.04, debug=False):
         # Plot the point cloud
         plot_point_cloud(subsampled_lidar)
 
-    return norm_diff_vec, lidar_idx, neighbors
+    return norm_diff_vec, lidar_idx, neighbors, kmeans.labels_ # cluster labels
 
 def cons_f(n):
 
@@ -89,7 +97,7 @@ def objective(n, V):
 
     return np.sum(np.square(np.matmul(V, n[:, np.newaxis])))
 
-def ransac(lidar, normalized_diff_vectors, lidar_idx, neighbors, num_planes=10, num_iterations=100, num_points=2, min_inlier_count=100, tol=1e-2, d1=0.02, d2=0.07, debug=True):
+def ransac(lidar, normalized_diff_vectors, lidar_idx, cluster, num_iterations=20, num_points=2, min_inlier_count=100, tol=1e-6, d1=0.02, d2=0.07, debug=True):
     '''
     Inputs:
         cloud - Nx3 point cloud
@@ -106,64 +114,57 @@ def ransac(lidar, normalized_diff_vectors, lidar_idx, neighbors, num_planes=10, 
     constraint = NonlinearConstraint(cons_f, 1., 1., jac=cons_J, hess=cons_H)
 
     # Apply RANSAC to estimate the main directions of the point cloud
-    i = 0
+    models = [None] * (np.max(cluster)+1)
+    for label, _ in enumerate(models):
+        cluster_subset_idx = cluster==label
+        normalized_diff_vectors_subset = normalized_diff_vectors[cluster_subset_idx]
+        lidar_subset_idx = np.array(lidar_idx)[cluster_subset_idx]
+        lidar_subset = lidar[lidar_idx][cluster_subset_idx]
+        i = 0
+        best_inliers = 0
+        while i < num_iterations:
+            # Model from num_points samples
+            idx = np.random.choice(len(lidar_subset_idx), num_points, replace=False)
+            normalized_diff_vectors_sample = normalized_diff_vectors_subset[idx, :]
+            subsamp_lidar_idx = lidar_subset_idx[idx]
 
-    models = [None] * num_planes
-    best_inliers = -1 * np.ones((num_planes,))
-    while i < num_iterations:
-        # Model from num_points samples
-        idx = np.random.choice(len(lidar_idx), num_points, replace=False)
-        normalized_diff_vectors_sample = normalized_diff_vectors[idx, :]
-        subsamp_lidar_idx = np.array(lidar_idx)[idx]
+            # Solve as a linear constrained problem:
+            #   minimize_n [v1; v2] [n]
+            #   s.t.       [n]^T [n] = 1
+            res = minimize(
+                objective,
+                x0 = np.array([0., -1., 0.]),
+                args = (normalized_diff_vectors_sample,),
+                constraints = constraint,
+                method = 'trust-constr'
+            )
+            n = res.x
 
-        # Solve as a linear constrained problem:
-        #   minimize_n [v1; v2] [n]
-        #   s.t.       [n]^T [n] = 1
-        res = minimize(
-            objective,
-            x0 = np.array([0., -1., 0.]),
-            args = (normalized_diff_vectors_sample,),
-            constraints = constraint,
-            method = 'trust-constr'
-        )
-        n = res.x
+            errors = np.square(np.matmul(normalized_diff_vectors_subset, n[:, np.newaxis]))
+            is_inlier = np.squeeze(errors < tol)
 
-        errors = np.square(np.matmul(normalized_diff_vectors, n[:, np.newaxis]))
-        is_inlier = np.squeeze(errors < tol)
+            if np.count_nonzero(is_inlier) > 0 and np.where(is_inlier)[0].shape[0] > 1:
+                # Reject thin and long plane segments with lamda3 >> lamda2
+                cov = np.cov(lidar_subset[is_inlier, :].transpose())
+                eigvals, _ = np.linalg.eig(cov)
 
-        if np.count_nonzero(is_inlier) > 0 and np.where(is_inlier)[0].shape[0] > 1:
-            # Reject thin and long plane segments with lamda3 >> lamda2
-            cov = np.cov(lidar[np.array(lidar_idx)[is_inlier], :].transpose())
-            eigvals, _ = np.linalg.eig(cov)
+                # if number of inliers exceeds threshold, add it to the list of candidate models
+                if np.count_nonzero(is_inlier) > best_inliers and np.count_nonzero(is_inlier) >= min_inlier_count and abs(eigvals[2]) - abs(eigvals[1]) < 0.5:
+                    
+                    # push new model to back, pop one off the front
+                    # make sure that models are sorted from least to greatest
+                    model = dict()
+                    model["inliers"] = np.unique(
+                        np.hstack((lidar_subset_idx[is_inlier], subsamp_lidar_idx)))
+                    model["normal"] = n
+                    model["centroid"] = np.sum(lidar[model["inliers"]], axis=0) / model["inliers"].shape[0]
 
-            # if number of inliers exceeds threshold, add it to the list of candidate models
-            if np.count_nonzero(is_inlier) > np.min(best_inliers) and np.count_nonzero(is_inlier) >= min_inlier_count and abs(eigvals[2]) - abs(eigvals[1]) < 0.5:
-                
-                # push new model to back, pop one off the front
-                # make sure that models are sorted from least to greatest
-                model = dict()
-                model["inliers"] = np.unique(
-                    np.hstack((np.array(lidar_idx)[is_inlier], subsamp_lidar_idx)))
-                model["normal"] = n
-                model["centroid"] = np.sum(lidar[model["inliers"]], axis=0) / model["inliers"].shape[0]
+                    models[label] = model
 
-                best_inliers[:-1] = best_inliers[1:]
-                best_inliers[-1] = np.count_nonzero(is_inlier)
+                    best_inliers = np.where(is_inlier)[0].shape[0]
 
-                if i == 0:
-                    for j in range(num_planes):
-                        models[j] = model 
-
-                models.append(model)
-                models.pop(0)
-
-                # sort by number of number of inliers
-                sorted_idxs = np.argsort(best_inliers)
-                models = [models[m] for m in sorted_idxs.tolist()]
-                best_inliers = best_inliers[sorted_idxs]
-
-        print("num inliers: {} num iterations {}".format(best_inliers.transpose(), i))
-        i += 1
+            print("num inliers: {} num iterations {}".format(best_inliers, i))
+            i += 1
 
     # TODO: Merge neighboring planes
     # - Check the angle and the distance between every two sets of planes
@@ -176,7 +177,7 @@ def ransac(lidar, normalized_diff_vectors, lidar_idx, neighbors, num_planes=10, 
 
     return models # TODO: Need to double check that the inliers are also neighbors
 
-def plot_pc_over_image(lidar, image, T_velo2cam, K):
+def plot_pc_over_image(lidar, image, T_velo2cam, K, plane=None):
 
     # Filter out lidar points outside field of view
 
@@ -225,11 +226,48 @@ def plot_pc_over_image(lidar, image, T_velo2cam, K):
         radius=1,
         color=np.float_(color),
         thickness=-1)
+
+    if plane is not None:
+        center = plane['centroid']
+        normal = plane['normal']
+        points = np.vstack((center + normal, center))
+        points_pc = points.copy()
+
+        points = np.matmul(np.hstack((points, np.ones((2,1)))), T_velo2cam.T)
+        points = np.matmul(points[:, :3], K.T) # (N x 3) x (3 x 3) 
+        points = points / points[:, 2, None]
+
+        color = rgb(1.0, bytes=True)
+        color = list(color)
+        color = color[:-1]
+        
+        for point in points:
+            cv2.circle(img=image,
+                center=(np.int_(point[0]), np.int_(point[1])),
+                radius=5,
+                color=np.float_(color),
+                thickness=-1)
+
+        plt.plot(points[:, 0], points[:, 1])
         
     plt.imshow(image)
     plt.xticks([])
     plt.yticks([])
     plt.show()
+    plt.close()
+
+    if plane is not None:
+        fig = plt.figure()
+        ax = fig.add_subplot(projection='3d')
+        ax.scatter(lidar[:,0], lidar[:,1], lidar[:,2])
+        ax.plot3D(points_pc[:,0], points_pc[:,1], points_pc[:,2], 'red')
+
+        ax.set_xlabel('x')
+        ax.set_xlabel('y')
+        ax.set_xlabel('z')
+
+        plt.show()
+        plt.close()
 
     plot_point_cloud(lidar)
 
@@ -251,14 +289,14 @@ def main(debug=True):
     lidar = plot_pc_over_image(lidar, image, T_velo2cam, K)
 
     # Get normalized difference vectors
-    normalized_diff_vectors, lidar_idx, neighbors = get_normalized_diff_vectors(lidar, debug=True)
+    normalized_diff_vectors, lidar_idx, neighbors, clusters = get_normalized_diff_vectors(lidar, debug=True)
 
     # Apply RANSAC to get plane normals
     # Get the plane origins, normals, and dimensions (convex hull)
-    planes = ransac(lidar, normalized_diff_vectors, lidar_idx, neighbors)
+    planes = ransac(lidar, normalized_diff_vectors, lidar_idx, clusters)
     for plane in planes:
         cloud = lidar[plane['inliers'], :]
-        _ = plot_pc_over_image(cloud, image, T_velo2cam, K)
+        _ = plot_pc_over_image(cloud, image, T_velo2cam, K, plane=plane)
 
 if __name__ == '__main__':
 
