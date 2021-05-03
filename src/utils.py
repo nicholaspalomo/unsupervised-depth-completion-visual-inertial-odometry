@@ -524,13 +524,13 @@ if __name__ == "__main__":
     # TODO: add here an example of running this module with input arguments
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--robot", help="robot name, e.g. husky1", required=False, type=str, default="spot1")
+    parser.add_argument("--robot", help="robot name, e.g. husky1", required=False, type=str, default="spot2")
     parser.add_argument("--camera", choices=["camera_front", "camera_left", "camera_right", "builtin_camera_rear"], help="name of camera", required=False, type=str, default="builtin_camera_rear")
     parser.add_argument("--path", help="Path to bag files", required=False, type=str, default=os.path.join(pathlib.Path(__file__).parent.absolute(), "bags"))
     parser.add_argument("--create_dataset", help="Create h5py file", required=False, type=bool, default=False)
     parser.add_argument("--data_path", help="Directory to H5 file with dataset", required=False, type=str, default=os.path.join(pathlib.Path(__file__).parent.absolute(), "../costar.h5"))
-    parser.add_argument("--img_idx", help="Index of image in dataset", required=False, type=int, default=432)
-    parser.add_argument("--max_idx", help="Maximum index to extract from rosbags", required=False, type=int, default=500)
+    parser.add_argument("--img_idx", help="Index of image in dataset", required=False, type=int, default=23)
+    parser.add_argument("--max_idx", help="Maximum index to extract from rosbags", required=False, type=int, default=200)
     args = parser.parse_args()
 
     # TODO:

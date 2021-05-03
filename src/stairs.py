@@ -16,7 +16,7 @@ from sklearn import cluster
 
 # Need to keep track of the frame transformations as the robot moves in order to have the point cloud represented in the same frame
 COSTAR_DATA_DIRPATH = os.path.join(os.path.dirname(__file__), '..', 'costar.h5')
-DATA_INDEX = 428
+DATA_INDEX = 23
 NUM_DIFF_VECTORS = 10000
 
 def plot_point_cloud(point_clouds):
@@ -59,7 +59,8 @@ def get_normalized_diff_vectors(lidar, d1=0.02, d2=0.07, n_clusters=2, debug=Fal
         k += 1
 
     # cluster the normalized difference vectors
-    kmeans = cluster.KMeans(n_clusters=n_clusters, init='k-means++', n_init=10, max_iter=500, tol=0.0001, verbose=1).fit(norm_diff_vec)
+    # kmeans = cluster.KMeans(n_clusters=n_clusters, init='k-means++', n_init=10, max_iter=500, tol=0.0001, verbose=1).fit(norm_diff_vec)
+    kmeans = cluster.SpectralClustering(n_clusters=n_clusters, n_init=10, verbose=1).fit(norm_diff_vec)
 
     if debug:
         # Plot the clustered normalized difference vectors
