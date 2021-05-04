@@ -2,6 +2,7 @@ import argparse
 import cv2
 from matplotlib import pyplot as plt
 import numpy as np
+from scipy.cluster.hierarchy import centroid
 from scipy.interpolate import LinearNDInterpolator, CloughTocher2DInterpolator, griddata
 from scipy.spatial import Delaunay
 import h5py
@@ -16,7 +17,7 @@ from sklearn import cluster
 
 # Need to keep track of the frame transformations as the robot moves in order to have the point cloud represented in the same frame
 COSTAR_DATA_DIRPATH = os.path.join(os.path.dirname(__file__), '..', 'costar.h5')
-DATA_INDEX = 27 # 21, 24, 86
+DATA_INDEX = 86 # 21, 23, 86
 NUM_DIFF_VECTORS = 10000
 
 # IDEA: Filter out points within X distance of the camera, as these may correspond to the legs
@@ -100,7 +101,7 @@ def objective(n, V):
 
     return np.sum(np.square(np.matmul(V, n[:, np.newaxis])))
 
-def ransac(lidar, normalized_diff_vectors, lidar_idx, cluster, num_iterations=50, num_points=2, min_inlier_count=10, tol=1e-6, d1=0.02, d2=0.07, debug=True):
+def ransac(lidar, normalized_diff_vectors, lidar_idx, cluster, num_iterations=20, num_points=2, min_inlier_count=10, tol=1e-3, d1=0.02, d2=0.07, debug=True):
     '''
     Inputs:
         cloud - Nx3 point cloud
@@ -148,11 +149,11 @@ def ransac(lidar, normalized_diff_vectors, lidar_idx, cluster, num_iterations=50
 
             if np.count_nonzero(is_inlier) > 0 and np.where(is_inlier)[0].shape[0] > 1:
                 # Reject thin and long plane segments with lamda3 >> lamda2
-                cov = np.cov(lidar_subset[is_inlier, :].transpose())
-                eigvals, _ = np.linalg.eig(cov)
+                # cov = np.cov(lidar_subset[is_inlier, :].transpose())
+                # eigvals, _ = np.linalg.eig(cov)
 
                 # if number of inliers exceeds threshold, add it to the list of candidate models
-                if np.count_nonzero(is_inlier) > best_inliers and np.count_nonzero(is_inlier) >= min_inlier_count and abs(eigvals[2]) - abs(eigvals[1]) < 0.5:
+                if np.count_nonzero(is_inlier) > best_inliers and np.count_nonzero(is_inlier) >= min_inlier_count: # and abs(eigvals[2])/(abs(eigvals[1])+0.001) < 10.:
                     
                     # push new model to back, pop one off the front
                     # make sure that models are sorted from least to greatest
@@ -169,16 +170,170 @@ def ransac(lidar, normalized_diff_vectors, lidar_idx, cluster, num_iterations=50
             print("num inliers: {} num iterations {}".format(best_inliers, i))
             i += 1
 
-    # TODO: Merge neighboring planes
-    # - Check the angle and the distance between every two sets of planes
-    # angles = []
-    # distances = []
-    # for i in range(num_planes):
-    #     plane1 = models[i]
-    #     for j in range(num_planes):
-    #         plane2 = models[j]
-
     return models # TODO: Need to double check that the inliers are also neighbors
+
+def skew(x):
+    return np.array([[0, -x[2], x[1]],
+                     [x[2], 0, -x[0]],
+                     [-x[1], x[0], 0]])
+
+def rotmat_a2b(a, b):
+
+    v = np.cross(a, b)
+    s = np.linalg.norm(v)
+    c = np.dot(a, b)
+
+    R = np.eye(3) + skew(v) * s + skew(v)**2 * (1 - c)
+
+    U, _, V_transpose = np.linalg.svd(R, full_matrices=True)
+
+    return np.matmul(U, V_transpose)
+
+def merge_planes(lidar, planes, ratio=3., min_cluster_size=20, max_dist=0.03, max_angle=15, max_offset=5., debug=True):
+    # max_angle given in degrees!
+
+    segmented_cloud = []
+    segmented_cloud_centers_normals = []
+    for n in planes:
+        cloud = lidar[n['inliers'], :]
+
+        # Cut the point cloud into thin slices perpendicular to n, the principal directions of the point cloud
+        bins = np.linspace(-max_offset, max_offset, num=250)
+        normal = n['normal']
+        R_cloud2normal = rotmat_a2b(normal, np.array([0,0,1]))
+        T_cloud2normal = np.eye(4)
+        T_cloud2normal[:3, :3] = R_cloud2normal
+
+        for i, bin_i in enumerate(bins):
+            if i < bins.shape[0]-1:
+
+                # Check if points above plane
+                T_cloud2normal[:3, -1] = n['centroid']
+                # cloud_frame1 = np.matmul(np.hstack((cloud, np.ones((cloud.shape[0], 1)))), T_cloud2normal.T) # cloud in frame of plane1
+                cloud_frame1 = np.matmul(T_cloud2normal[:3,:3], cloud.T).T
+
+                cloud_frame1[:, 2] -= bin_i
+                points_above_plane1 = np.dot(cloud_frame1[:, :3], np.array([0, 0, 1])) > 0
+                cloud_frame1[:, 2] += bin_i
+
+                # Check if points below plane
+                cloud_frame1[:, 2] -= bins[i+1]
+                points_below_plane2 = np.dot(cloud_frame1[:, :3], np.array([0, 0, 1])) < 0
+
+                # Get the points in the slice
+                points_in_slice = cloud[points_above_plane1 & points_below_plane2, :]
+
+                if points_in_slice.shape[0] >= min_cluster_size:
+
+                    if debug:
+                        fig = plt.figure()
+                        plt.cla()
+                        plt.clf()
+                        ax = fig.add_subplot(projection='3d')
+
+                        # plot plane 1
+                        # a plane is a*x+b*y+c*z+d=0
+                        # [a,b,c] is the normal. Thus, we have to calculate
+                        # d and we're set
+                        xx, yy = np.meshgrid(np.linspace(-1, 1, num=51), np.linspace(-1, 1, num=51))
+                        grid_normal = np.hstack((
+                            np.reshape(xx, (-1,1)),
+                            np.reshape(yy, (-1,1)),
+                            bin_i * np.ones((xx.shape[0]*xx.shape[1], 1))
+                        ))
+                        grid_cloud = np.matmul(T_cloud2normal[:3,:3].T, grid_normal.T).T
+
+                        xx1 = np.reshape(grid_cloud[:, 0], xx.shape)
+                        yy1 = np.reshape(grid_cloud[:, 1], xx.shape)
+                        z1 = np.reshape(grid_cloud[:, 2], xx.shape)
+
+                        ax.plot_surface(xx1, yy1, z1, alpha=0.2, color='g')
+
+                        # plot plane 2
+                        grid_normal = np.hstack((
+                            np.reshape(xx, (-1,1)),
+                            np.reshape(yy, (-1,1)),
+                            bins[i+1] * np.ones((xx.shape[0]*xx.shape[1], 1))
+                        ))
+                        grid_cloud = np.matmul(T_cloud2normal[:3,:3].T, grid_normal.T).T
+
+                        xx2 = np.reshape(grid_cloud[:, 0], xx.shape)
+                        yy2 = np.reshape(grid_cloud[:, 1], yy.shape)
+                        z2 = np.reshape(grid_cloud[:, 2], xx.shape)
+
+                        ax.plot_surface(xx2, yy2, z2, alpha=0.2, color='b')
+
+                        # plot normal vector
+                        points_in_slice = cloud[points_above_plane1 & points_below_plane2, :]
+                        points_outside_slice = cloud[~(points_above_plane1 & points_below_plane2), :]
+
+                        ax.scatter(points_in_slice[:,0], points_in_slice[:,1], points_in_slice[:,2], color='red')
+                        ax.scatter(points_outside_slice[:,0], points_outside_slice[:,1], points_outside_slice[:,2], color='blue')
+                        normal_vec = np.vstack((n['centroid'], n['centroid'] + normal))
+                        ax.plot3D(normal_vec[:,0], normal_vec[:,1], normal_vec[:,2], 'red')
+
+                        ax.set_xlabel('x')
+                        ax.set_xlabel('y')
+                        ax.set_xlabel('z')
+
+                        plt.show(block=False)
+                        plt.pause(1.5)
+                        plt.close(fig)
+
+                    # Get the number of clusters based on the minimum number of points in a plane
+                    n_clusters = points_in_slice.shape[0] // min_cluster_size
+
+                    # Cluster the points in the slice
+                    kmeans = cluster.KMeans(n_clusters=n_clusters, init='k-means++', n_init=10, max_iter=500, tol=0.0001, verbose=1).fit(points_in_slice)
+
+                    for j, centroid in enumerate(kmeans.cluster_centers_):
+                        # Reject the plane segments that do not satisfy eigenvalue criterion
+                        candidates = points_in_slice[kmeans.labels_ == j, :]
+                        if candidates.shape[0] > 1:
+                            cov = np.cov(candidates.transpose())
+                            eigvals, _ = np.linalg.eig(cov)
+
+                            if abs(eigvals[2])/(abs(eigvals[1])+0.001) < ratio:
+                                point_cloud = o3d.geometry.PointCloud()
+                                point_cloud.points = o3d.utility.Vector3dVector(candidates)
+
+                                point_cloud.estimate_normals(
+                                    search_param=o3d.geometry.KDTreeSearchParamHybrid(radius=100.0,
+                                    max_nn=100))
+
+                                avg_normal = np.mean(np.asarray(point_cloud.normals), axis=0)
+                                avg_normal /= np.linalg.norm(avg_normal)
+
+                                segmented_cloud.append(candidates)
+
+                                segmented_cloud_centers_normals.append(
+                                    np.array([centroid[0], centroid[1], centroid[2], avg_normal[0], avg_normal[1], avg_normal[2]])
+                                )
+
+    # Merge neighboring planes based on heuristic
+    segmented_cloud_centers_normals = np.array(segmented_cloud_centers_normals)
+    clouds = []
+    merged = [False] * len(segmented_cloud)
+    for i, cloud in enumerate(segmented_cloud):
+        dist_check = np.where(abs(np.linalg.norm(segmented_cloud_centers_normals[i, :3]) - np.linalg.norm(segmented_cloud_centers_normals[:, :3], axis=1)) < max_dist)[0]
+
+        angle_check = np.where(
+            np.arccos(np.dot(segmented_cloud_centers_normals[:, 3:], segmented_cloud_centers_normals[i, 3:])) * 180 / np.pi < max_angle)[0]
+        angle_check = np.hstack((np.array([i]), angle_check))
+
+        check = np.intersect1d(angle_check, dist_check)
+
+        if check.shape[0] > 0:
+            for pc_idx in np.unique(check):
+                if not merged[pc_idx]:
+                    if pc_idx != i:
+                        clouds[len(clouds)-1] = np.vstack((clouds[len(clouds)-1], segmented_cloud[pc_idx]))
+                        merged[pc_idx] = True
+                    else:
+                        clouds.append(segmented_cloud[i])
+                        merged[i] = True
+    
+    return clouds
 
 def plot_pc_over_image(lidar, image, T_velo2cam, K, plane=None):
 
@@ -292,7 +447,7 @@ def main(debug=True):
     lidar = plot_pc_over_image(lidar, image, T_velo2cam, K)
 
     # Get normalized difference vectors
-    normalized_diff_vectors, lidar_idx, neighbors, clusters = get_normalized_diff_vectors(lidar, debug=True)
+    normalized_diff_vectors, lidar_idx, neighbors, clusters = get_normalized_diff_vectors(lidar, debug=False)
 
     # Apply RANSAC to get plane normals
     # Get the plane origins, normals, and dimensions (convex hull)
@@ -300,6 +455,26 @@ def main(debug=True):
     for plane in planes:
         cloud = lidar[plane['inliers'], :]
         _ = plot_pc_over_image(cloud, image, T_velo2cam, K, plane=plane)
+
+    # Merge neighboring planes
+    segmentation = merge_planes(lidar, planes, debug=False)
+
+    # Plot segmentation results
+    fig = plt.figure()
+    plt.cla()
+    plt.clf()
+    ax = fig.add_subplot(projection='3d')
+
+    colors = ['red', 'green', 'blue']
+    for i, cloud in enumerate(segmentation):
+        ax.scatter(cloud[:,0], cloud[:,1], cloud[:,2], color=colors[i % 3])
+
+    ax.set_xlabel('x')
+    ax.set_xlabel('y')
+    ax.set_xlabel('z')
+
+    plt.show()
+    plt.close(fig)
 
 if __name__ == '__main__':
 
