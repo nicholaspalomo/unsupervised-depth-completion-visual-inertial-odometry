@@ -17,7 +17,7 @@ from sklearn import cluster
 
 # Need to keep track of the frame transformations as the robot moves in order to have the point cloud represented in the same frame
 COSTAR_DATA_DIRPATH = os.path.join(os.path.dirname(__file__), '..', 'costar.h5')
-DATA_INDEX = 86 # 21, 23, 86
+DATA_INDEX = 23 # 21, 23, 86
 NUM_DIFF_VECTORS = 10000
 
 # IDEA: Filter out points within X distance of the camera, as these may correspond to the legs
@@ -34,7 +34,7 @@ def plot_point_cloud(point_clouds):
 
     o3d.visualization.draw_geometries([cloud])
 
-def get_normalized_diff_vectors(lidar, d1=0.02, d2=0.03, n_clusters=2, debug=False):
+def get_normalized_diff_vectors(lidar, d1=0.02, d2=0.07, n_clusters=2, debug=False):
 
     neighbors = dict()
     for i, point in enumerate(lidar):
@@ -189,7 +189,7 @@ def rotmat_a2b(a, b):
 
     return np.matmul(U, V_transpose)
 
-def merge_planes(lidar, planes, ratio=3., min_cluster_size=20, max_dist=0.03, max_angle=15, max_offset=5., debug=True):
+def merge_planes(lidar, planes, ratio=2., min_cluster_size=75, max_dist=0.05, max_angle=30, max_offset=5., debug=True):
     # max_angle given in degrees!
 
     segmented_cloud = []
@@ -452,9 +452,9 @@ def main(debug=True):
     # Apply RANSAC to get plane normals
     # Get the plane origins, normals, and dimensions (convex hull)
     planes = ransac(lidar, normalized_diff_vectors, lidar_idx, clusters)
-    for plane in planes:
-        cloud = lidar[plane['inliers'], :]
-        _ = plot_pc_over_image(cloud, image, T_velo2cam, K, plane=plane)
+    # for plane in planes:
+    #     cloud = lidar[plane['inliers'], :]
+    #     _ = plot_pc_over_image(cloud, image, T_velo2cam, K, plane=plane)
 
     # Merge neighboring planes
     segmentation = merge_planes(lidar, planes, debug=False)
