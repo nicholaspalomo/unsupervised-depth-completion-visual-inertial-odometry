@@ -17,7 +17,7 @@ from sklearn import cluster
 
 # Need to keep track of the frame transformations as the robot moves in order to have the point cloud represented in the same frame
 COSTAR_DATA_DIRPATH = os.path.join(os.path.dirname(__file__), '..', 'costar.h5')
-DATA_INDEX = 23 # 21, 23, 86
+DATA_INDEX = 86 # 21, 23, 86
 NUM_DIFF_VECTORS = 10000
 
 # IDEA: Filter out points within X distance of the camera, as these may correspond to the legs
@@ -101,7 +101,7 @@ def objective(n, V):
 
     return np.sum(np.square(np.matmul(V, n[:, np.newaxis])))
 
-def ransac(lidar, normalized_diff_vectors, lidar_idx, cluster, num_iterations=20, num_points=2, min_inlier_count=10, tol=1e-3, d1=0.02, d2=0.07, debug=True):
+def ransac(lidar, normalized_diff_vectors, lidar_idx, cluster, num_iterations=40, num_points=2, min_inlier_count=10, tol=1e-3, d1=0.02, d2=0.07, debug=True):
     '''
     Inputs:
         cloud - Nx3 point cloud
@@ -317,8 +317,9 @@ def merge_planes(lidar, planes, ratio=2., min_cluster_size=75, max_dist=0.05, ma
     for i, cloud in enumerate(segmented_cloud):
         dist_check = np.where(abs(np.linalg.norm(segmented_cloud_centers_normals[i, :3]) - np.linalg.norm(segmented_cloud_centers_normals[:, :3], axis=1)) < max_dist)[0]
 
+        angle = (np.arccos(np.dot(segmented_cloud_centers_normals[:, 3:], segmented_cloud_centers_normals[i, 3:])) + np.pi) % (2 * np.pi) - np.pi
         angle_check = np.where(
-            np.arccos(np.dot(segmented_cloud_centers_normals[:, 3:], segmented_cloud_centers_normals[i, 3:])) * 180 / np.pi < max_angle)[0]
+            abs(angle) * 180 / np.pi < max_angle)[0]
         angle_check = np.hstack((np.array([i]), angle_check))
 
         check = np.intersect1d(angle_check, dist_check)
@@ -452,9 +453,9 @@ def main(debug=True):
     # Apply RANSAC to get plane normals
     # Get the plane origins, normals, and dimensions (convex hull)
     planes = ransac(lidar, normalized_diff_vectors, lidar_idx, clusters)
-    # for plane in planes:
-    #     cloud = lidar[plane['inliers'], :]
-    #     _ = plot_pc_over_image(cloud, image, T_velo2cam, K, plane=plane)
+    for plane in planes:
+        cloud = lidar[plane['inliers'], :]
+        _ = plot_pc_over_image(cloud, image, T_velo2cam, K, plane=plane)
 
     # Merge neighboring planes
     segmentation = merge_planes(lidar, planes, debug=False)
