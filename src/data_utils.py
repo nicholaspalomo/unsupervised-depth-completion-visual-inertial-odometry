@@ -151,8 +151,8 @@ def save_depth(z, path):
     path : str
       path to store depth map
   '''
-  z = np.uint32(z*256.0)
-  z = Image.fromarray(z, mode='I')
+  z = np.uint8(z*255.0)
+  z = Image.fromarray(z)
   z.save(path)
 
 def load_validity_map(path):
@@ -185,8 +185,8 @@ def save_validity_map(v, path):
   '''
   v[v <= 0] = 0.0
   v[v > 0] = 1.0
-  v = np.uint32(v*256.0)
-  v = Image.fromarray(v, mode='I')
+  v = np.uint8(v*255.0)
+  v = Image.fromarray(v)
   v.save(path)
 
 def load_calibration(path):
@@ -248,6 +248,39 @@ def interpolate_depth(depth_map, validity_map, log_space=False):
     Z = np.exp(Z)
     Z[Z < 1e-1] = 0.0
   return Z
+
+def create_sparse_depth(pc, h, w, K):
+  '''
+  Project 3D depth map to 2D image
+
+  Args:
+    depth_map : np.float32
+      H x W depth map
+    validity_map : np.float32
+      H x W depth map
+    log_space : bool
+      if set then produce in log space
+
+  Returns:
+    np.float32 : H x W depth map
+  '''
+
+  max_depth = 10 # maximum depth of 10 m for lidar measurements
+  pc_img = np.matmul(pc[:,:3], K.T)
+  pc_img = pc_img / pc_img[:, -1, None]
+  pc_intensity_16bit = np.linalg.norm(pc[:,:3], axis=1)
+  pc_intensity_16bit = np.clip(pc_intensity_16bit, 0., max_depth)
+  pc_intensity_16bit /= max_depth
+
+  # apply Gaussian filter to z?
+  z = np.zeros((h, w), dtype=np.float32)
+  for i, j in enumerate(pc_img):
+    u = min(np.int_(j[1]), h-1)
+    v = min(np.int_(j[0]), w-1)
+    z[u, v] = pc_intensity_16bit[i]
+  z = cv2.blur(z, (1,1))
+  
+  return z
 
 def compose_pose(g1, g2):
   '''
