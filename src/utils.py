@@ -25,6 +25,8 @@ import cv2
 import open3d as o3d
 
 # TO DO: Modify this script to work with both front and rear cameras
+# TODO: Report Lidar in base frame
+# TODO: Use transform from base frame to camera frame
 
 import sys
 sys.path.append('.')
@@ -299,7 +301,7 @@ class LiDARCameraRosbagData:
         self.camera_depth_image_topic = '/' + robot_name + '/' + camera_name + '/mono/image_raw/compressed' # '/aligned_depth_to_color/image_raw_throttle' # /compressedDepth'
         self.camera_info_topic = '/' + robot_name + '/' + camera_name + '/mono/camera_info' # '/husky1/camera_front/color/camera_info'
         self.camera_depth_info_topic = '/' + robot_name + '/' + camera_name + '/depth/camera_info'
-        self.lidar_topic = '/' + robot_name + '/spot_driver/local_grid' # '/velodyne_points' #TODO: handle the case for multiple velodynes
+        self.lidar_topic = '/' + robot_name + '/velodyne_points' # '/spot_driver/local_grid' # '/velodyne_points' #TODO: handle the case for multiple velodynes
         self.lidar_out_filename = os.getcwd() + '/costar.h5' #TODO: make this a function parameter
 
     def get_bag_names(self, path):
@@ -527,10 +529,10 @@ if __name__ == "__main__":
     parser.add_argument("--robot", help="robot name, e.g. husky1", required=False, type=str, default="spot2")
     parser.add_argument("--camera", choices=["camera_front", "camera_left", "camera_right", "builtin_camera_rear"], help="name of camera", required=False, type=str, default="builtin_camera_rear")
     parser.add_argument("--path", help="Path to bag files", required=False, type=str, default=os.path.join(pathlib.Path(__file__).parent.absolute(), "bags"))
-    parser.add_argument("--create_dataset", help="Create h5py file", required=False, type=bool, default=False)
+    parser.add_argument("--create_dataset", help="Create h5py file", required=False, type=bool, default=True)
     parser.add_argument("--data_path", help="Directory to H5 file with dataset", required=False, type=str, default=os.path.join(pathlib.Path(__file__).parent.absolute(), "../costar.h5"))
     parser.add_argument("--img_idx", help="Index of image in dataset", required=False, type=int, default=23)
-    parser.add_argument("--max_idx", help="Maximum index to extract from rosbags", required=False, type=int, default=200)
+    parser.add_argument("--max_idx", help="Maximum index to extract from rosbags", required=False, type=int, default=100)
     args = parser.parse_args()
 
     # TODO:

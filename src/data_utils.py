@@ -93,6 +93,7 @@ def create_depth_with_validity_map(pc, h, w, K, debug=False):
   z = cv2.blur(z, (1,1))
   v = z.astype(np.float32)
   v[z > 0] = 1.0
+  v[z < 0] = 0.0
 
   if debug:
     cv2.imshow('depth image', z)
@@ -121,6 +122,7 @@ def load_depth_with_validity_map(path):
   z[z <= 0] = 0.0
   v = z.astype(np.float32)
   v[z > 0]  = 1.0
+  v[z < 0] = 0.0
   return z, v
 
 def load_depth(path):
@@ -152,6 +154,7 @@ def save_depth(z, path):
       path to store depth map
   '''
   z = np.uint8(z*255.0)
+  z[z < 0] = 0
   z = Image.fromarray(z)
   z.save(path)
 
@@ -168,8 +171,9 @@ def load_validity_map(path):
   '''
   # Loads depth map from 16-bit PNG file
   v = np.array(Image.open(path), dtype=np.float32)
-  assert(np.all(np.unique(v) == [0, 256]))
+  assert(np.all(np.unique(v) == [0, 255])) # 256 ? 
   v[v > 0] = 1
+  v[v < 0] = 0
   return v
 
 
@@ -278,6 +282,7 @@ def create_sparse_depth(pc, h, w, K):
     u = min(np.int_(j[1]), h-1)
     v = min(np.int_(j[0]), w-1)
     z[u, v] = pc_intensity_16bit[i]
+  z[z < 0] = 0.0
   z = cv2.blur(z, (1,1))
   
   return z

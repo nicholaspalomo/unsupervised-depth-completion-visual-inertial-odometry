@@ -18,9 +18,9 @@ https://arxiv.org/pdf/1905.08616.pdf
   Global constants
 '''
 # Input image dimensions
-N_BATCH             = 8
-N_HEIGHT            = 320
-N_WIDTH             = 768
+N_BATCH             = 2
+N_HEIGHT            = 480
+N_WIDTH             = 640
 N_CHANNEL           = 3
 # Network Hyperparameters
 N_EPOCH             = 50
