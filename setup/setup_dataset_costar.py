@@ -16,7 +16,8 @@ import data_utils
 '''
     Paths for Costar dataset
 '''
-CAMERA = 'rear' # 'front' or 'rear'
+CAMERA = 'front' # 'front' or 'rear'
+HAS_DEPTH_CAMERA = True
 
 TRAIN_SPLIT = 0.75
 VALIDATION_SPLIT = 0.25
@@ -47,7 +48,7 @@ VAL_SEMI_DENSE_DEPTH_OUTPUT_FILEPATH = os.path.join(VAL_OUTPUT_REF_DIRPATH, SEMI
 
 TRAINED_MODEL_PATH = os.path.join('..', 'costar_data', 'trained_models')
 
-def process_frame(params, output_path, debug=False, camera=CAMERA):
+def process_frame(params, output_path, sparse_point_cloud_prev, debug=False, camera=CAMERA):
     image0_idx, image1_idx, image2_idx = params
 
     with h5py.File(COSTAR_DATA_DIRPATH, 'r') as hf:
@@ -72,43 +73,52 @@ def process_frame(params, output_path, debug=False, camera=CAMERA):
         sparse_point_cloud2 = np.reshape(sparse_point_cloud2, (-1,4))
         sparse_point_cloud = np.vstack((sparse_point_cloud, sparse_point_cloud2[:, :3]))
 
-        # transform point cloud into camera frame
-        if camera == 'rear':
-            T_camera_2_img = np.array([[0, -1, 0], [0, 0, -1], [1, 0, 0]])
-            T_camera_2_img = np.vstack((T_camera_2_img, np.zeros((1,3))))
-            T_camera_2_img = np.hstack((T_camera_2_img, np.zeros((4,1))))
-            T_camera_2_img[-1, -1] = 1.
-            T_camera_2_img = T_camera_2_img.T
-
-            T_velo_2_camera = np.matmul(T_camera_2_img, np.reshape(hf['lidar']['tf_velo2cam'][:], (4, 4)))
-            sparse_point_cloud = np.matmul(
-                np.hstack((sparse_point_cloud, np.ones((sparse_point_cloud.shape[0], 1)))),
-                T_velo_2_camera.T
-            )
-        else:
-            sparse_point_cloud = np.matmul(
-                np.hstack((sparse_point_cloud, np.ones((sparse_point_cloud.shape[0], 1)))),
-                np.reshape(hf['lidar']['tf_velo2cam'][:], (4, 4)).T
-            )
-
         # get the camera intrinsic matrix
         K = np.reshape(hf['image']['intrinsics'][:], (3, 3))
         h, w = hf['image']['resolution'][0], hf['image']['resolution'][1]
 
-    # filter out the points which lie outside the camera FOV
-    pc_cam_pos_z_idx = np.where((sparse_point_cloud[:, 2] > 0))[0]
-    sparse_point_cloud = sparse_point_cloud[pc_cam_pos_z_idx, :] # points in front of the image plane
-    sparse_point_cloud_img = np.matmul(sparse_point_cloud[:,:3], K.T) # point cloud given in the image frame
-    sparse_point_cloud_img = sparse_point_cloud_img / sparse_point_cloud_img[:, -1, None]
-    
-    width_mask = ((sparse_point_cloud_img[:,0] >= 0) & (sparse_point_cloud_img[:,0] <= w))
-    height_mask = ((sparse_point_cloud_img[:,1] >= 0) & (sparse_point_cloud_img[:,1] <= h))
-    pc_img_mask_idx = np.where(width_mask & height_mask)[0]
+        if HAS_DEPTH_CAMERA:
+            iz = 255 - np.reshape(hf['image']['depth_image'][int(image0_idx), :], (hf['image']['resolution'][0], hf['image']['resolution'][1]))
 
-    sparse_point_cloud = sparse_point_cloud[pc_img_mask_idx, :]
+        if sparse_point_cloud.shape[0] < 1:
+            print("Point cloud empty at line [{}, {}, {}]!".format(image1_idx, image0_idx, image2_idx))
+            sparse_point_cloud = sparse_point_cloud_prev.copy()
+
+        else:
+            # transform point cloud into camera frame
+            if camera == 'rear':
+                T_camera_2_img = np.array([[0, -1, 0], [0, 0, -1], [1, 0, 0]])
+                T_camera_2_img = np.vstack((T_camera_2_img, np.zeros((1,3))))
+                T_camera_2_img = np.hstack((T_camera_2_img, np.zeros((4,1))))
+                T_camera_2_img[-1, -1] = 1.
+                T_camera_2_img = T_camera_2_img.T
+
+                T_velo_2_camera = np.matmul(T_camera_2_img, np.reshape(hf['lidar']['tf_velo2cam'][:], (4, 4)))
+                sparse_point_cloud = np.matmul(
+                    np.hstack((sparse_point_cloud, np.ones((sparse_point_cloud.shape[0], 1)))),
+                    T_velo_2_camera.T
+                )
+            else:
+                sparse_point_cloud = np.matmul(
+                    np.hstack((sparse_point_cloud, np.ones((sparse_point_cloud.shape[0], 1)))),
+                    np.reshape(hf['lidar']['tf_velo2cam'][:], (4, 4)).T
+                )
+
+                # filter out the points which lie outside the camera FOV
+                pc_cam_pos_z_idx = np.where((sparse_point_cloud[:, 2] > 0))[0]
+                sparse_point_cloud = sparse_point_cloud[pc_cam_pos_z_idx, :] # points in front of the image plane
+                sparse_point_cloud_img = np.matmul(sparse_point_cloud[:,:3], K.T) # point cloud given in the image frame
+                sparse_point_cloud_img = sparse_point_cloud_img / sparse_point_cloud_img[:, -1, None]
+                
+                width_mask = ((sparse_point_cloud_img[:,0] >= 0) & (sparse_point_cloud_img[:,0] <= w))
+                height_mask = ((sparse_point_cloud_img[:,1] >= 0) & (sparse_point_cloud_img[:,1] <= h))
+                pc_img_mask_idx = np.where(width_mask & height_mask)[0]
+
+                sparse_point_cloud = sparse_point_cloud[pc_img_mask_idx, :]
 
     sz, vm = data_utils.create_depth_with_validity_map(sparse_point_cloud[:, :3], h, w, K)
-    iz = data_utils.interpolate_depth(sz, vm)
+    if not HAS_DEPTH_CAMERA:
+        iz = data_utils.interpolate_depth(sz, vm)
 
     if debug:
         cv2.imshow('interpolated depth image', iz)
@@ -134,7 +144,7 @@ def process_frame(params, output_path, debug=False, camera=CAMERA):
     semi_dense_path = paths[-1]
     paths = [os.path.join(path, fname) for path in paths[:-1]]
 
-    return (paths[0], paths[3], paths[1], paths[2], semi_dense_path)
+    return (paths[0], paths[3], paths[1], paths[2], semi_dense_path, sparse_point_cloud)
 
 def main():
 
@@ -180,15 +190,16 @@ def main():
     train_interp_depth_output_paths = []
     train_validity_map_output_paths = []
     train_semi_dense_depth_output_paths = []
+    sparse_point_cloud = None
     for train_idx in train_indexes:
         if train_idx > 0 and train_idx < train_indexes.shape[0]-1:
 
             params = (train_idx, train_idx-1, train_idx+1)
 
-            results = process_frame(params, TRAIN_OUTPUT_REF_DIRPATH)
+            results = process_frame(params, TRAIN_OUTPUT_REF_DIRPATH, sparse_point_cloud)
 
             image_output_path, sparse_depth_path, interp_depth_output_path, \
-                validity_map_output_path, semi_dense_depth_path = results
+                validity_map_output_path, semi_dense_depth_path, sparse_point_cloud = results
 
             train_image_output_paths.append(image_output_path)
             train_sparse_depth_output_paths.append(sparse_depth_path)
@@ -234,10 +245,10 @@ def main():
     for validation_idx in validation_indexes:
         params = (validation_idx, validation_idx, validation_idx)
 
-        results = process_frame(params, VAL_OUTPUT_REF_DIRPATH)
+        results = process_frame(params, VAL_OUTPUT_REF_DIRPATH, sparse_point_cloud)
 
         image_output_path, sparse_depth_path, interp_depth_output_path, \
-                validity_map_output_path, semi_dense_depth_path = results
+                validity_map_output_path, semi_dense_depth_path, sparse_point_cloud = results
 
         validation_image_output_paths.append(image_output_path)
         validation_sparse_depth_output_paths.append(sparse_depth_path)
