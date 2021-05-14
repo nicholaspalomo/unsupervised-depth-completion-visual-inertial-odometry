@@ -16,8 +16,8 @@ import sklearn
 from sklearn import cluster
 
 # Need to keep track of the frame transformations as the robot moves in order to have the point cloud represented in the same frame
-COSTAR_DATA_DIRPATH = os.path.join(os.path.dirname(__file__), '..', 'costar.h5')
-DATA_INDEX = 86 # 21, 23, 86
+COSTAR_DATA_DIRPATH = os.path.join(os.path.dirname(__file__), '..', 'costar2.h5')
+DATA_INDEX = 23 # 21, 23, 27, 86, 127
 NUM_DIFF_VECTORS = 10000
 
 # IDEA: Filter out points within X distance of the camera, as these may correspond to the legs
@@ -34,7 +34,7 @@ def plot_point_cloud(point_clouds):
 
     o3d.visualization.draw_geometries([cloud])
 
-def get_normalized_diff_vectors(lidar, d1=0.02, d2=0.07, n_clusters=2, debug=False):
+def get_normalized_diff_vectors(lidar, d1=0.02, d2=0.03, n_clusters=2, debug=False):
 
     neighbors = dict()
     for i, point in enumerate(lidar):

@@ -155,7 +155,7 @@ def save_depth(z, path):
   '''
   z = np.uint8(z*255.0)
   z[z < 0] = 0
-  z = Image.fromarray(z)
+  z = Image.fromarray(z.astype(np.uint8))
   z.save(path)
 
 def load_validity_map(path):
@@ -190,7 +190,7 @@ def save_validity_map(v, path):
   v[v <= 0] = 0.0
   v[v > 0] = 1.0
   v = np.uint8(v*255.0)
-  v = Image.fromarray(v)
+  v = Image.fromarray(v.astype(np.uint8))
   v.save(path)
 
 def load_calibration(path):

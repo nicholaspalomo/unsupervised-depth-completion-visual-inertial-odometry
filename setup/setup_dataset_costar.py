@@ -17,7 +17,7 @@ import data_utils
     Paths for Costar dataset
 '''
 CAMERA = 'front' # 'front' or 'rear'
-HAS_DEPTH_CAMERA = True
+HAS_DEPTH_CAMERA = False
 
 TRAIN_SPLIT = 0.75
 VALIDATION_SPLIT = 0.25

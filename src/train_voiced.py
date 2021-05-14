@@ -22,14 +22,14 @@ from voiced_main import train
 parser = argparse.ArgumentParser()
 
 # Training and validation input filepaths
-# parser.add_argument('--train_image_path',
-#     type=str, required=True, help='Path to list of training image paths')
-# parser.add_argument('--train_interp_depth_path',
-#     type=str, required=True, help='Path to list of training interpolated depth paths')
-# parser.add_argument('--train_validity_map_path',
-#     type=str, required=True, help='Path to list of training validity map paths')
-# parser.add_argument('--train_intrinsics_path',
-#     type=str, required=True, help='Path to list of training intrinsics paths')
+parser.add_argument('--train_image_path',
+    type=str, required=True, help='Path to list of training image paths')
+parser.add_argument('--train_interp_depth_path',
+    type=str, required=True, help='Path to list of training interpolated depth paths')
+parser.add_argument('--train_validity_map_path',
+    type=str, required=True, help='Path to list of training validity map paths')
+parser.add_argument('--train_intrinsics_path',
+    type=str, required=True, help='Path to list of training intrinsics paths')
 # Batch parameters
 parser.add_argument('--n_batch',
     type=int, default=settings.N_BATCH, help='Number of samples per batch')
@@ -104,14 +104,14 @@ if __name__ == '__main__':
   assert(len(args.learning_rates) == len(args.learning_bounds)+1)
 
   train(
-        # train_image_path=args.train_image_path,
-        # train_interp_depth_path=args.train_interp_depth_path,
-        # train_validity_map_path=args.train_validity_map_path,
-        # train_intrinsics_path=args.train_intrinsics_path,
-        train_image_path='/media/nico/46B8200EB81FFB5F/workspace/costar_data/train/image/costar_train_image.txt',
-        train_interp_depth_path='/media/nico/46B8200EB81FFB5F/workspace/costar_data/train/interp_depth/costar_train_interp_depth.txt',
-        train_validity_map_path='/media/nico/46B8200EB81FFB5F/workspace/costar_data/train/validity_map/costar_train_validity_map.txt',
-        train_intrinsics_path='/media/nico/46B8200EB81FFB5F/workspace/costar_data/intrinsics/costar_train_intrinsics.txt',
+        train_image_path=args.train_image_path,
+        train_interp_depth_path=args.train_interp_depth_path,
+        train_validity_map_path=args.train_validity_map_path,
+        train_intrinsics_path=args.train_intrinsics_path,
+        # train_image_path='/media/nico/46B8200EB81FFB5F/workspace/costar_data/train/image/costar_train_image.txt',
+        # train_interp_depth_path='/media/nico/46B8200EB81FFB5F/workspace/costar_data/train/interp_depth/costar_train_interp_depth.txt',
+        # train_validity_map_path='/media/nico/46B8200EB81FFB5F/workspace/costar_data/train/validity_map/costar_train_validity_map.txt',
+        # train_intrinsics_path='/media/nico/46B8200EB81FFB5F/workspace/costar_data/intrinsics/costar_train_intrinsics.txt',
         n_batch=args.n_batch,
         n_height=args.n_height,
         n_width=args.n_width,

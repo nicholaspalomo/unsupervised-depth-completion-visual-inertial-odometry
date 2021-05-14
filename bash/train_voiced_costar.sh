@@ -8,8 +8,8 @@ python src/train_voiced.py \
 --train_validity_map_path /media/nico/46B8200EB81FFB5F/workspace/costar_data/train/validity_map/costar_train_validity_map.txt \
 --train_intrinsics_path /media/nico/46B8200EB81FFB5F/workspace/costar_data/intrinsics/costar_train_intrinsics.txt \
 --n_batch 2 \
---n_height 480 \
---n_width 640 \
+--n_height 240 \
+--n_width 424 \
 --n_channel 3 \
 --n_epoch 30 \
 --learning_rates 1.2e-4,0.6e-4,0.3e-4 \
@@ -28,7 +28,9 @@ python src/train_voiced.py \
 --w_sz 0.20 \
 --w_pc 0.10 \
 --pose_norm frobenius \
---rot_param exponential
-# --n_summary 1000 \
-# --n_checkpoint 5000 \
-# --checkpoint_path /media/nico/46B8200EB81FFB5F/workspace/costar_data/trained_models/vggnet11_kitti_model
+--rot_param exponential \
+--n_summary 1000 \
+--n_checkpoint 5000 \
+--checkpoint_path /media/nico/46B8200EB81FFB5F/workspace/unsupervised-depth-completion-visual-inertial-odometry/log
+# --restore_path /media/nico/46B8200EB81FFB5F/workspace/costar_data/trained_models/vggnet11_kitti_model \
+

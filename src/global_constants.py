@@ -19,8 +19,8 @@ https://arxiv.org/pdf/1905.08616.pdf
 '''
 # Input image dimensions
 N_BATCH             = 2
-N_HEIGHT            = 480
-N_WIDTH             = 640
+N_HEIGHT            = 240
+N_WIDTH             = 424
 N_CHANNEL           = 3
 # Network Hyperparameters
 N_EPOCH             = 50
@@ -53,5 +53,5 @@ N_CHECKPOINT        = 5000
 N_SUMMARY           = 100
 OUTPUT_PATH         = 'out'
 # Hardware settings
-N_THREAD            = 8
+N_THREAD            = 100
 EPSILON             = 1e-10
