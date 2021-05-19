@@ -28,15 +28,15 @@ LEARNING_RATES      = [1.2e-4, 0.6e-4, 0.3e-4]
 LEARNING_BOUNDS     = [18, 24]
 LEARNING_RATES_TXT  = '1.2e-4,0.6e-4,0.3e-4'
 LEARNING_BOUNDS_TXT = '18,24'
-MIN_Z               = 1.50
-MAX_Z               = 100.00
+MIN_Z               = 0.1
+MAX_Z               = 10.0
 POSE_NORM           = 'frobenius'
 ROT_PARAM           = 'exponential'
 # Preprocessing
 OCC_THRESHOLD       = 1.5
 OCC_KSIZE           = 7
 # Network Structure
-NET_TYPE            = 'vggnet11'
+NET_TYPE            = 'vggnet08'
 IM_FILTER_PCT       = 0.75
 SZ_FILTER_PCT       = 0.25
 # Weights for loss function
@@ -55,3 +55,14 @@ OUTPUT_PATH         = 'out'
 # Hardware settings
 N_THREAD            = 100
 EPSILON             = 1e-10
+
+# For debugging evaluation script - hardcoded parameters
+INTRINSICS_FILE     = '/media/nico/46B8200EB81FFB5F/workspace/costar_data/intrinsics/intrinsics.npy'
+RESTORE_PATH        = '/media/nico/46B8200EB81FFB5F/workspace/unsupervised-depth-completion-visual-inertial-odometry/log/model.ckpt-1650'
+IMAGE_PATH          = '/media/nico/46B8200EB81FFB5F/workspace/costar_data/validation/image/costar_val_image.txt'
+INTERP_DEPTH_PATH   = '/media/nico/46B8200EB81FFB5F/workspace/costar_data/validation/interp_depth/costar_val_interp_depth.txt'
+VALIDITY_MAP_PATH   = '/media/nico/46B8200EB81FFB5F/workspace/costar_data/validation/validity_map/costar_val_validity_map.txt'
+GROUND_TRUTH_PATH   = ''
+START_IDX           = 0
+END_IDX             = N_BATCH
+PLT_DENSE_PC        = True

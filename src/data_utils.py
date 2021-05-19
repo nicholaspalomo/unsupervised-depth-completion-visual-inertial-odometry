@@ -64,7 +64,7 @@ def read_paths(filepath):
 
   return path_list
 
-def create_depth_with_validity_map(pc, h, w, K, debug=False):
+def create_depth_with_validity_map(pc, h, w, K, max_depth=10, debug=False):
   '''
   converts the point cloud to a sparse depth map
 
@@ -77,7 +77,6 @@ def create_depth_with_validity_map(pc, h, w, K, debug=False):
     numpy : binary validity map for available depth measurement locations
   '''
 
-  max_depth = 10 # maximum depth of 10 m for lidar measurements
   pc_img = np.matmul(pc[:,:3], K.T)
   pc_img = pc_img / pc_img[:, -1, None]
   pc_intensity_16bit = np.linalg.norm(pc[:,:3], axis=1)

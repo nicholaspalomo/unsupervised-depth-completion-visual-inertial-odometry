@@ -18,9 +18,11 @@ import data_utils
 '''
 CAMERA = 'front' # 'front' or 'rear'
 HAS_DEPTH_CAMERA = False
-
-TRAIN_SPLIT = 0.75
-VALIDATION_SPLIT = 0.25
+MAX_DEPTH = 10 # meters
+TRAIN_SPLIT = 0.9
+VALIDATION_SPLIT = 0.1
+START_DATA_IDX = 260
+END_DATA_IDX = 1100
 
 COSTAR_DATA_DIRPATH = os.path.join('costar.h5')
 TRAIN_OUTPUT_REF_DIRPATH = os.path.join('..', 'costar_data', 'train')
@@ -116,7 +118,7 @@ def process_frame(params, output_path, sparse_point_cloud_prev, debug=False, cam
 
                 sparse_point_cloud = sparse_point_cloud[pc_img_mask_idx, :]
 
-    sz, vm = data_utils.create_depth_with_validity_map(sparse_point_cloud[:, :3], h, w, K)
+    sz, vm = data_utils.create_depth_with_validity_map(sparse_point_cloud[:, :3], h, w, K, max_depth=MAX_DEPTH)
     if not HAS_DEPTH_CAMERA:
         iz = data_utils.interpolate_depth(sz, vm)
 
@@ -135,7 +137,7 @@ def process_frame(params, output_path, sparse_point_cloud_prev, debug=False, cam
                 pass
 
     # Write to disk
-    fname = "%06i.png" % image0_idx
+    fname = "%06i.png" % (image0_idx - START_DATA_IDX)
     cv2.imwrite(os.path.join(paths[0], fname), image)
     data_utils.save_depth(iz, os.path.join(paths[1], fname))
     data_utils.save_validity_map(vm, os.path.join(paths[2], fname))
@@ -173,11 +175,11 @@ def main():
         Create validity maps and paths for sparse and semi dense depth for training
     '''
     with h5py.File(COSTAR_DATA_DIRPATH, 'r') as hf:
-        image_indexes = hf["image"]["image_idx"]
-        lidar_indexes = hf["lidar"]["lidar_idx"]
+        image_indexes = hf["image"]["image_idx"][START_DATA_IDX:END_DATA_IDX]
+        lidar_indexes = hf["lidar"]["lidar_idx"][START_DATA_IDX:END_DATA_IDX]
 
-        train_indexes = image_indexes[:int(image_indexes.shape[0] * TRAIN_SPLIT)]
-        validation_indexes = image_indexes[int(image_indexes.shape[0] * TRAIN_SPLIT):]
+        train_indexes = image_indexes[:math.floor(image_indexes.shape[0] * TRAIN_SPLIT)]
+        validation_indexes = image_indexes[math.floor(image_indexes.shape[0] * TRAIN_SPLIT):]
 
     intrinsics_path_and_fname = os.path.join(INTRINSICS_PATH, 'intrinsics.npy')
     np.save(intrinsics_path_and_fname, intrinsics)
@@ -192,7 +194,7 @@ def main():
     train_semi_dense_depth_output_paths = []
     sparse_point_cloud = None
     for train_idx in train_indexes:
-        if train_idx > 0 and train_idx < train_indexes.shape[0]-1:
+        if train_idx > START_DATA_IDX and train_idx < train_indexes.shape[0]-1 + START_DATA_IDX:
 
             params = (train_idx, train_idx-1, train_idx+1)
 
@@ -262,27 +264,27 @@ def main():
     print('Storing validation image file paths into: %s' % VAL_IMAGE_OUTPUT_FILEPATH)
     with open(VAL_IMAGE_OUTPUT_FILEPATH, "w") as o:
         for idx in range(len(validation_indexes)-2):
-            o.write(os.path.abspath(train_image_output_paths[idx])+'\n')
+            o.write(os.path.abspath(validation_image_output_paths[idx])+'\n')
 
     print('Storing validation sparse depth file paths into: %s' % VAL_SPARSE_DEPTH_OUTPUT_FILEPATH)
     with open(VAL_SPARSE_DEPTH_OUTPUT_FILEPATH, "w") as o:
         for idx in range(len(validation_indexes)-2):
-            o.write(os.path.abspath(train_sparse_depth_output_paths[idx])+'\n')
+            o.write(os.path.abspath(validation_sparse_depth_output_paths[idx])+'\n')
 
     print('Storing validation interpolated depth file paths into: %s' % VAL_INTERP_DEPTH_OUTPUT_FILEPATH)
     with open(VAL_INTERP_DEPTH_OUTPUT_FILEPATH, "w") as o:
         for idx in range(len(validation_indexes)-2):
-            o.write(os.path.abspath(train_interp_depth_output_paths[idx])+'\n')
+            o.write(os.path.abspath(validation_interp_depth_output_paths[idx])+'\n')
 
     print('Storing validation validity map file paths into: %s' % VAL_VALIDITY_MAP_OUTPUT_FILEPATH)
     with open(VAL_VALIDITY_MAP_OUTPUT_FILEPATH, "w") as o:
         for idx in range(len(validation_indexes)-2):
-            o.write(os.path.abspath(train_validity_map_output_paths[idx])+'\n')
+            o.write(os.path.abspath(validation_validity_map_output_paths[idx])+'\n')
 
     print('Storing validation semi dense depth file paths into: %s' % VAL_SEMI_DENSE_DEPTH_OUTPUT_FILEPATH)
     with open(VAL_SEMI_DENSE_DEPTH_OUTPUT_FILEPATH, "w") as o:
         for idx in range(len(validation_indexes)-2):
-            o.write(os.path.abspath(train_semi_dense_depth_output_paths[idx])+'\n')
+            o.write(os.path.abspath(validation_semi_dense_depth_output_paths[idx])+'\n')
 
 if __name__ == '__main__':
     main()

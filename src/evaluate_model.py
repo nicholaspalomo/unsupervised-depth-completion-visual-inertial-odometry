@@ -22,29 +22,65 @@ import data_utils, eval_utils
 from dataloader import DataLoader
 from voiced_model import VOICEDModel
 from data_utils import log
+import cv2
+import open3d as o3d
 
+def plot_point_cloud(z, img_path, intrinsics_path):
+
+    # load the image
+    img = cv2.imread(img_path)
+    img = img[:, (img.shape[1] // 3):(2*(img.shape[1] // 3)), :]
+
+    # load the camera intrinsic matrix
+    K = np.load(intrinsics_path)
+
+    # create the point cloud
+    points = np.zeros((img.shape[0]*img.shape[1], 6)) # x, y, z, r, g, b for point cloud
+    i = 0
+    for u in range(img.shape[1]):
+        for v in range(img.shape[0]):
+
+            # convert u, v coordinates to x-y-z
+            xy = np.squeeze(np.matmul(np.linalg.inv(K), np.array([u, v, 1])[:, np.newaxis]))
+
+            points[i, 0] = xy[0]
+            points[i, 1] = xy[1]
+            points[i, 2] = z[v, u]
+            points[i, 3:] = img[v, u, :]
+            i += 1
+
+    # create an O3D point cloud object
+    cloud = o3d.geometry.PointCloud()
+    cloud.points = o3d.utility.Vector3dVector(points[:, :3] * 10.)
+    cloud.colors = o3d.utility.Vector3dVector(np.fliplr(points[:, 3:]) / 255.)
+
+    o3d.visualization.draw_geometries([cloud])
 
 parser = argparse.ArgumentParser()
 
 N_HEIGHT = 352
 N_WIDTH = 1216
 
+parser.add_argument('--plt_dense_pc', type=bool, default=settings.PLT_DENSE_PC, help='Plot densified point cloud')
+# Intrinsics
+parser.add_argument('--intrinsics_file',
+    type=str, default=settings.INTRINSICS_FILE, help='Path to intrinsics file (npy)')
 # Model path
 parser.add_argument('--restore_path',
-    type=str, required=True, help='Path to restore model')
+    type=str, default=settings.RESTORE_PATH, help='Path to restore model')
 # Input paths
 parser.add_argument('--image_path',
-    type=str, required=True, help='Path to list of image paths')
+    type=str, default=settings.IMAGE_PATH, help='Path to list of image paths')
 parser.add_argument('--interp_depth_path',
-    type=str, required=True, help='Path to list of interpolated depth paths')
+    type=str, default=settings.INTERP_DEPTH_PATH, help='Path to list of interpolated depth paths')
 parser.add_argument('--validity_map_path',
-    type=str, required=True, help='Path to list of validity map paths')
+    type=str, default=settings.VALIDITY_MAP_PATH, help='Path to list of validity map paths')
 parser.add_argument('--ground_truth_path',
-    type=str, default='', help='Path to list of ground truth paths')
+    type=str, default=settings.GROUND_TRUTH_PATH, help='Path to list of ground truth paths')
 parser.add_argument('--start_idx',
-    type=int, default=0, help='Start index of the list of paths to evaluate')
+    type=int, default=settings.START_IDX, help='Start index of the list of paths to evaluate')
 parser.add_argument('--end_idx',
-    type=int, default=1000, help='Last index of the list of paths to evaluate')
+    type=int, default=settings.END_IDX, help='Last index of the list of paths to evaluate')
 # Batch parameters
 parser.add_argument('--n_batch',
     type=int, default=settings.N_BATCH, help='Number of samples per batch')
@@ -176,6 +212,10 @@ with tf.Graph().as_default():
       break
   # Remove the padded examples
   z_arr = z_arr[0:n_sample, ...]
+
+  if args.plt_dense_pc:
+      for idx in range(n_sample):
+        plot_point_cloud(z_arr[idx, ...], im_paths[idx], args.intrinsics_file)
 
   # Run evaluation
   if len(gt_arr) > 0:
