@@ -1,7 +1,7 @@
 #!/bin/bash
 
 python src/utils.py \
-    --create_dataset \
+    --create_dataset True \
     --hdf5_path data/costar.h5 \
     --robot_name spot2 \
     --camera_name camera_front \
@@ -11,5 +11,5 @@ python src/utils.py \
     --depth_camera_info_topic aligned_depth_to_color/camera_info \
     --point_cloud_topic velodyne_points \
     --bags_path src/bags/ \
-    --max_idx 800 \
+    --max_idx 1500 \
     --img_idx 0

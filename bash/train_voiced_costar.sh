@@ -12,7 +12,7 @@ python src/train_voiced.py \
 --n_width 424 \
 --n_channel 3 \
 --n_epoch 50 \
---learning_rates 0.5e-4,0.25e-4,0.125e-4 \
+--learning_rates 1.2e-4,0.6e-4,0.3e-4 \
 --learning_bounds 18,24 \
 --occ_threshold 1.5 \
 --occ_ksize 7 \
@@ -31,5 +31,5 @@ python src/train_voiced.py \
 --rot_param exponential \
 --n_summary 10 \
 --n_checkpoint 10 \
---checkpoint_path log \
---restore_path /media/nico/46B8200EB81FFB5F/workspace/unsupervised-depth-completion-visual-inertial-odometry/log/model.ckpt-1840
+--checkpoint_path log
+--restore_path /media/nico/46B8200EB81FFB5F/workspace/unsupervised-depth-completion-visual-inertial-odometry/log/model.ckpt-5940

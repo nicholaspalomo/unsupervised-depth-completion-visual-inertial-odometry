@@ -21,10 +21,10 @@ HAS_DEPTH_CAMERA = False
 MAX_DEPTH = 10 # meters
 TRAIN_SPLIT = 0.9
 VALIDATION_SPLIT = 0.1
-START_DATA_IDX = 260
-END_DATA_IDX = 1100
+START_DATA_IDX = 700
+END_DATA_IDX = 1500
 
-COSTAR_DATA_DIRPATH = os.path.join('costar.h5')
+COSTAR_DATA_DIRPATH = os.path.join('data', 'costar.h5')
 TRAIN_OUTPUT_REF_DIRPATH = os.path.join('..', 'costar_data', 'train')
 VAL_OUTPUT_REF_DIRPATH = os.path.join('..', 'costar_data', 'validation')
 TEST_OUTPUT_REF_DIRPATH = os.path.join('..', 'costar_data', 'test')

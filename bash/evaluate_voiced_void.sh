@@ -7,7 +7,7 @@ python src/evaluate_model.py \
 --interp_depth_path /media/nico/46B8200EB81FFB5F/workspace/costar_data/validation/interp_depth/costar_val_interp_depth.txt \
 --validity_map_path /media/nico/46B8200EB81FFB5F/workspace/costar_data/validation/validity_map/costar_val_validity_map.txt \
 --ground_truth_path /media/nico/46B8200EB81FFB5F/workspace/costar_data/validation/validity_map/costar_val_validity_map.txt \
---start_idx 0 \
+--start_idx 63 \
 --end_idx 80 \
 --n_batch 3 \
 --n_height 240 \
@@ -24,4 +24,4 @@ python src/evaluate_model.py \
 --save_depth \
 --output_path /media/nico/46B8200EB81FFB5F/workspace/unsupervised-depth-completion-visual-inertial-odometry/log/output_path \
 --intrinsics_file  /media/nico/46B8200EB81FFB5F/workspace/costar_data/intrinsics/intrinsics.npy \
---restore_path /media/nico/46B8200EB81FFB5F/workspace/unsupervised-depth-completion-visual-inertial-odometry/log/model.ckpt-1840
+--restore_path /media/nico/46B8200EB81FFB5F/workspace/unsupervised-depth-completion-visual-inertial-odometry/log/model.ckpt-5940
