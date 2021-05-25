@@ -58,11 +58,11 @@ EPSILON             = 1e-10
 
 # For debugging evaluation script - hardcoded parameters
 INTRINSICS_FILE     = '/media/nico/46B8200EB81FFB5F/workspace/costar_data/intrinsics/intrinsics.npy'
-RESTORE_PATH        = ''
+RESTORE_PATH        = '/media/nico/46B8200EB81FFB5F/workspace/unsupervised-depth-completion-visual-inertial-odometry/log/model.ckpt-5940'
 IMAGE_PATH          = '/media/nico/46B8200EB81FFB5F/workspace/costar_data/validation/image/costar_val_image.txt'
 INTERP_DEPTH_PATH   = '/media/nico/46B8200EB81FFB5F/workspace/costar_data/validation/interp_depth/costar_val_interp_depth.txt'
 VALIDITY_MAP_PATH   = '/media/nico/46B8200EB81FFB5F/workspace/costar_data/validation/validity_map/costar_val_validity_map.txt'
-GROUND_TRUTH_PATH   = ''
-START_IDX           = 0
-END_IDX             = N_BATCH
+GROUND_TRUTH_PATH   = '/media/nico/46B8200EB81FFB5F/workspace/costar_data/validation/sparse_depth/costar_val_sparse_depth.txt'
+START_IDX           = 63
+END_IDX             = 65
 PLT_DENSE_PC        = True

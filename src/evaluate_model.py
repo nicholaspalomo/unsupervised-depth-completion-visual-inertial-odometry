@@ -15,6 +15,7 @@ https://arxiv.org/pdf/1905.08616.pdf
 }
 '''
 import os, sys, argparse
+from re import S
 import numpy as np
 import tensorflow as tf
 import global_constants as settings
@@ -24,22 +25,76 @@ from voiced_model import VOICEDModel
 from data_utils import log
 import cv2
 import open3d as o3d
+import matplotlib.pyplot as plt
 
-def plot_point_cloud(z, img_path, intrinsics_path):
+def make_mean_abs_err_plot(z, z_gt, K, img):
 
-    # load the image
-    img = cv2.imread(img_path)
-    img = img[:, (img.shape[1] // 3):(2*(img.shape[1] // 3)), :]
+    # compute SE and graph
+    se = np.abs(z_gt - np.squeeze(z))
+    graph = []
+    for i in range(se.shape[0]):
+        for j in range(se.shape[1]):
+            if ~np.isnan(se[i, j]):
+                graph.append([z_gt[i, j], se[i, j], i, j]) # x, y
+    graph = np.array(graph)
+    idx_sort = np.argsort(graph[:, 0])
+    graph = graph[idx_sort, :]
 
-    # load the camera intrinsic matrix
-    K = np.load(intrinsics_path)
+    unique_x, unique_x_idx = np.unique(graph[:, 0], return_index=True)
+
+    unique_y = np.zeros(unique_x.shape)
+    max_y = np.zeros(unique_x.shape)
+    min_y = np.zeros(unique_x.shape)
+    percentage = np.zeros(unique_x.shape)
+    for i in range(unique_x_idx.shape[0]-1):
+        unique_y[i] = np.mean(graph[unique_x_idx[i]:unique_x_idx[i+1], 1])
+        max_y[i] = np.max(graph[unique_x_idx[i]:unique_x_idx[i+1], 1])
+        min_y[i] = np.min(graph[unique_x_idx[i]:unique_x_idx[i+1], 1])
+        percentage[i] = (unique_x_idx[i+1] - unique_x_idx[i]) / graph.shape[0]
+    unique_y[-1] = graph[unique_x_idx[-1], 1]
+    max_y[-1] = graph[unique_x_idx[-1], 1]
+    min_y[-1] = graph[unique_x_idx[-1], 1]
+    percentage[-1] = 1 / graph.shape[0]
+
+    plt.plot(unique_x * settings.MAX_Z, unique_y)
+    plt.fill_between(unique_x * settings.MAX_Z, min_y, max_y, alpha=0.3)
+    plt.fill_between(unique_x * settings.MAX_Z, np.zeros(percentage.shape), percentage, alpha=0.3)
+    plt.xlabel('distance to camera [m]')
+    plt.legend(['mean absolute estimation error [m]', 'error bounds [m]', 'depth distribution [x100%]'])
+    plt.show()
+    plt.close()
+
+    # make error map
+    rgb = plt.cm.get_cmap('jet')
+    colors = []
+    for point in graph:
+        err = point[1]
+        i = point[2]
+        j = point[3]
+
+        color = rgb(err / np.max(graph[:, 1]), bytes=True)
+        color = list(color)
+        color = color[:-1]
+        colors.append(color[::-1])
+
+        cv2.circle(img=img,
+                center=(np.int_(j), np.int_(i)),
+                radius=1,
+                color=np.float_(color),
+                thickness=-1)
+                
+    plt.imshow(img)
+    plt.show()
+    plt.close()
+
+def make_cloud_visualization(img, z, K):
 
     # create the point cloud
     points = np.zeros((img.shape[0]*img.shape[1], 6)) # x, y, z, r, g, b for point cloud
     i = 0
     for u in range(img.shape[1]):
         for v in range(img.shape[0]):
-
+            
             # convert u, v coordinates to x-y-z
             xy = np.squeeze(np.matmul(np.linalg.inv(K), np.array([u, v, 1])[:, np.newaxis]))
 
@@ -49,12 +104,38 @@ def plot_point_cloud(z, img_path, intrinsics_path):
             points[i, 3:] = img[v, u, :]
             i += 1
 
+    points = points[~np.isnan(points[:, 2]), :]
+
     # create an O3D point cloud object
     cloud = o3d.geometry.PointCloud()
-    cloud.points = o3d.utility.Vector3dVector(points[:, :3] * 10.)
+    cloud.points = o3d.utility.Vector3dVector(points[:, :3])
     cloud.colors = o3d.utility.Vector3dVector(np.fliplr(points[:, 3:]) / 255.)
 
     o3d.visualization.draw_geometries([cloud])
+
+    return
+
+def plot_point_cloud(z, gt, vm, img_path, intrinsics_path):
+
+    # load the image
+    img = cv2.imread(img_path)
+    img = img[:, (img.shape[1] // 3):(2*(img.shape[1] // 3)), :]
+
+    # load the camera intrinsic matrix
+    K = np.load(intrinsics_path)
+
+    # densified point cloud
+    make_cloud_visualization(img, np.squeeze(z), K)
+
+    # sparse point cloud
+    z_gt = gt.copy()
+    for i in range(z.shape[0]):
+        for j in range(z.shape[1]):
+            if vm[i, j] < 1:
+                z_gt[i, j] = np.nan
+    make_cloud_visualization(img, z_gt, K)
+
+    make_mean_abs_err_plot(z, z_gt, K, img)
 
 parser = argparse.ArgumentParser()
 
@@ -213,9 +294,11 @@ with tf.Graph().as_default():
   # Remove the padded examples
   z_arr = z_arr[0:n_sample, ...]
 
-  if args.plt_dense_pc:
-      for idx in range(n_sample):
-        plot_point_cloud(z_arr[idx, ...], im_paths[idx], args.intrinsics_file)
+  if args.ground_truth_path != '':
+    if args.plt_dense_pc:
+        for idx in range(n_sample):
+            gt, vm = data_utils.load_depth_with_validity_map(gt_paths[idx])
+            plot_point_cloud(z_arr[idx, ...], gt, vm, im_paths[idx], args.intrinsics_file)
 
   # Run evaluation
   if len(gt_arr) > 0:
