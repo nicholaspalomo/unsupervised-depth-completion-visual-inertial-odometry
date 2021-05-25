@@ -30,7 +30,7 @@ import matplotlib.pyplot as plt
 def make_mean_abs_err_plot(z, z_gt, K, img):
 
     # compute SE and graph
-    se = np.abs(z_gt - np.squeeze(z))
+    se = np.abs(z_gt - np.squeeze(z)) * settings.MAX_Z
     graph = []
     for i in range(se.shape[0]):
         for j in range(se.shape[1]):
@@ -58,9 +58,9 @@ def make_mean_abs_err_plot(z, z_gt, K, img):
 
     plt.plot(unique_x * settings.MAX_Z, unique_y)
     plt.fill_between(unique_x * settings.MAX_Z, min_y, max_y, alpha=0.3)
-    plt.fill_between(unique_x * settings.MAX_Z, np.zeros(percentage.shape), percentage, alpha=0.3)
+    plt.fill_between(unique_x * settings.MAX_Z, np.zeros(percentage.shape), percentage * 100, alpha=0.3)
     plt.xlabel('distance to camera [m]')
-    plt.legend(['mean absolute estimation error [m]', 'error bounds [m]', 'depth distribution [x100%]'])
+    plt.legend(['mean absolute estimation error [m]', 'error bounds [m]', 'depth distribution [%]'])
     plt.show()
     plt.close()
 
