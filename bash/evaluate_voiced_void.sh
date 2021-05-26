@@ -9,7 +9,7 @@ python src/evaluate_model.py \
 --ground_truth_path /media/nico/46B8200EB81FFB5F/workspace/costar_data/validation/sparse_depth/costar_val_sparse_depth.txt \
 --start_idx 63 \
 --end_idx 80 \
---n_batch 3 \
+--n_batch 4 \
 --n_height 240 \
 --n_width 424 \
 --occ_threshold 1.5 \
@@ -24,4 +24,4 @@ python src/evaluate_model.py \
 --save_depth \
 --output_path /media/nico/46B8200EB81FFB5F/workspace/unsupervised-depth-completion-visual-inertial-odometry/log/output_path \
 --intrinsics_file  /media/nico/46B8200EB81FFB5F/workspace/costar_data/intrinsics/intrinsics.npy \
---restore_path /media/nico/46B8200EB81FFB5F/workspace/unsupervised-depth-completion-visual-inertial-odometry/log/model.ckpt-5940
+--restore_path /media/nico/46B8200EB81FFB5F/workspace/unsupervised-depth-completion-visual-inertial-odometry/log/model.ckpt-8990

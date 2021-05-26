@@ -18,7 +18,9 @@ import os
 import numpy as np
 from PIL import Image
 from scipy.interpolate import LinearNDInterpolator
+from scipy.spatial import Delaunay
 import cv2
+from sklearn import neighbors
 
 
 def log(s, filepath=None, to_console=True):
@@ -89,7 +91,7 @@ def create_depth_with_validity_map(pc, h, w, K, max_depth=10, debug=False):
     u = min(np.int_(j[1]), h-1)
     v = min(np.int_(j[0]), w-1)
     z[u, v] = pc_intensity_16bit[i]
-  z = cv2.blur(z, (1,1))
+
   v = z.astype(np.float32)
   v[z > 0] = 1.0
   v[z < 0] = 0.0
@@ -217,7 +219,7 @@ def load_calibration(path):
           pass
   return data
 
-def interpolate_depth(depth_map, validity_map, log_space=False):
+def interpolate_depth(depth_map, validity_map, log_space=False, kernel_size=(10, 10)):
   '''
   Interpolate sparse depth with barycentric coordinates
 
@@ -240,13 +242,18 @@ def interpolate_depth(depth_map, validity_map, log_space=False):
   if log_space:
     depth_values = np.log(depth_values)
   interpolator = LinearNDInterpolator(
-      # points=Delaunay(np.stack([data_row_idx, data_col_idx], axis=1).astype(np.float32)),
-      points=np.stack([data_row_idx, data_col_idx], axis=1),
+      points=Delaunay(np.stack([data_row_idx, data_col_idx], axis=1).astype(np.float32)),
+      # points=np.stack([data_row_idx, data_col_idx], axis=1),
       values=depth_values,
       fill_value=0 if not log_space else np.log(1e-3))
   query_row_idx, query_col_idx = np.meshgrid(np.arange(rows), np.arange(cols), indexing='ij')
   query_coord = np.stack([query_row_idx.ravel(), query_col_idx.ravel()], axis=1)
   Z = interpolator(query_coord).reshape([rows, cols])
+
+  z_max = np.max(Z)
+  z = cv2.GaussianBlur(Z, kernel_size, 0)
+  Z = z * z_max / np.max(z)
+
   if log_space:
     Z = np.exp(Z)
     Z[Z < 1e-1] = 0.0
@@ -282,8 +289,7 @@ def create_sparse_depth(pc, h, w, K):
     v = min(np.int_(j[0]), w-1)
     z[u, v] = pc_intensity_16bit[i]
   z[z < 0] = 0.0
-  z = cv2.blur(z, (1,1))
-  
+
   return z
 
 def compose_pose(g1, g2):

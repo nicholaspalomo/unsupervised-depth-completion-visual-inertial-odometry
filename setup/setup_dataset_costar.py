@@ -19,6 +19,8 @@ import data_utils
 CAMERA = 'front' # 'front' or 'rear'
 HAS_DEPTH_CAMERA = False
 MAX_DEPTH = 10 # meters
+KERNEL_SIZE = (3, 27)
+NEIGHBORHOOD = 20
 TRAIN_SPLIT = 0.9
 VALIDATION_SPLIT = 0.1
 START_DATA_IDX = 700
@@ -80,7 +82,7 @@ def process_frame(params, output_path, sparse_point_cloud_prev, debug=False, cam
         h, w = hf['image']['resolution'][0], hf['image']['resolution'][1]
 
         if HAS_DEPTH_CAMERA:
-            iz = 255 - np.reshape(hf['image']['depth_image'][int(image0_idx), :], (hf['image']['resolution'][0], hf['image']['resolution'][1]))
+            iz = ((np.reshape(hf['image']['depth_image'][int(image0_idx), :], (hf['image']['resolution'][0], hf['image']['resolution'][1]))).astype(np.float_) / 255.).astype(np.float_)
 
         if sparse_point_cloud.shape[0] < 1:
             print("Point cloud empty at line [{}, {}, {}]!".format(image1_idx, image0_idx, image2_idx))
@@ -120,7 +122,7 @@ def process_frame(params, output_path, sparse_point_cloud_prev, debug=False, cam
 
     sz, vm = data_utils.create_depth_with_validity_map(sparse_point_cloud[:, :3], h, w, K, max_depth=MAX_DEPTH)
     if not HAS_DEPTH_CAMERA:
-        iz = data_utils.interpolate_depth(sz, vm)
+        iz = data_utils.interpolate_depth(sz, vm, kernel_size=KERNEL_SIZE)
 
     if debug:
         cv2.imshow('interpolated depth image', iz)
