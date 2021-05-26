@@ -26,6 +26,7 @@ from data_utils import log
 import cv2
 import open3d as o3d
 import matplotlib.pyplot as plt
+import time
 
 def make_mean_abs_err_plot(z, z_gt, K, img):
 
@@ -279,6 +280,7 @@ with tf.Graph().as_default():
 
   z_arr = np.zeros([n_step*args.n_batch, args.n_height, args.n_width, 1])
   step = 0
+  avg_time = 0
   while True:
     try:
       sys.stdout.write(
@@ -288,9 +290,15 @@ with tf.Graph().as_default():
       batch_start = step*args.n_batch
       batch_end = step*args.n_batch+args.n_batch
       step += 1
+      t = time.time()
       z_arr[batch_start:batch_end, ...] = session.run(model.predict)
+      print("Elapsed inferencing time: {}".format(time.time() - t))
+      avg_time += time.time() - t
     except tf.errors.OutOfRangeError:
       break
+
+  print("Averaged elapsed inferencing time: {}".format(avg_time / step))
+
   # Remove the padded examples
   z_arr = z_arr[0:n_sample, ...]
 
