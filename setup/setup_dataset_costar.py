@@ -62,20 +62,20 @@ def process_frame(params, output_path, sparse_point_cloud_prev, debug=False, cam
         image2 = np.reshape(hf['image']['image'][int(image2_idx), :], (hf['image']['resolution'][0], hf['image']['resolution'][1], 3))
         image = np.concatenate([image1, image0, image2], axis=1)
     
-        sparse_point_cloud = hf['lidar']['lidar'][image1_idx, :]
+        # sparse_point_cloud = hf['lidar']['lidar'][image1_idx, :]
+        # sparse_point_cloud = sparse_point_cloud[~np.isnan(sparse_point_cloud)]
+        # sparse_point_cloud = np.reshape(sparse_point_cloud, (-1,4))
+        # sparse_point_cloud = sparse_point_cloud[:, :3]
+
+        sparse_point_cloud = hf['lidar']['lidar'][image0_idx, :]
         sparse_point_cloud = sparse_point_cloud[~np.isnan(sparse_point_cloud)]
-        sparse_point_cloud = np.reshape(sparse_point_cloud, (-1,4))
-        sparse_point_cloud = sparse_point_cloud[:, :3]
+        sparse_point_cloud = np.reshape(sparse_point_cloud, (-1,4))[:, :3]
+        # sparse_point_cloud = np.vstack((sparse_point_cloud, sparse_point_cloud1[:, :3]))
 
-        sparse_point_cloud1 = hf['lidar']['lidar'][image0_idx, :]
-        sparse_point_cloud1 = sparse_point_cloud1[~np.isnan(sparse_point_cloud1)]
-        sparse_point_cloud1 = np.reshape(sparse_point_cloud1, (-1,4))
-        sparse_point_cloud = np.vstack((sparse_point_cloud, sparse_point_cloud1[:, :3]))
-
-        sparse_point_cloud2 = hf['lidar']['lidar'][image2_idx, :]
-        sparse_point_cloud2 = sparse_point_cloud2[~np.isnan(sparse_point_cloud2)]
-        sparse_point_cloud2 = np.reshape(sparse_point_cloud2, (-1,4))
-        sparse_point_cloud = np.vstack((sparse_point_cloud, sparse_point_cloud2[:, :3]))
+        # sparse_point_cloud2 = hf['lidar']['lidar'][image2_idx, :]
+        # sparse_point_cloud2 = sparse_point_cloud2[~np.isnan(sparse_point_cloud2)]
+        # sparse_point_cloud2 = np.reshape(sparse_point_cloud2, (-1,4))
+        # sparse_point_cloud = np.vstack((sparse_point_cloud, sparse_point_cloud2[:, :3]))
 
         # get the camera intrinsic matrix
         K = np.reshape(hf['image']['intrinsics'][:], (3, 3))

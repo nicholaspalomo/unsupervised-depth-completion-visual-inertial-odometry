@@ -7,7 +7,7 @@ python src/train_voiced.py \
 --train_interp_depth_path /media/nico/46B8200EB81FFB5F/workspace/costar_data/train/interp_depth/costar_train_interp_depth.txt \
 --train_validity_map_path /media/nico/46B8200EB81FFB5F/workspace/costar_data/train/validity_map/costar_train_validity_map.txt \
 --train_intrinsics_path /media/nico/46B8200EB81FFB5F/workspace/costar_data/intrinsics/costar_train_intrinsics.txt \
---n_batch 4 \
+--n_batch 3 \
 --n_height 240 \
 --n_width 424 \
 --n_channel 3 \
@@ -31,5 +31,5 @@ python src/train_voiced.py \
 --rot_param exponential \
 --n_summary 10 \
 --n_checkpoint 10 \
---checkpoint_path log
---restore_path /media/nico/46B8200EB81FFB5F/workspace/unsupervised-depth-completion-visual-inertial-odometry/log/model.ckpt-8990
+--checkpoint_path log \
+--restore_path /media/nico/46B8200EB81FFB5F/workspace/unsupervised-depth-completion-visual-inertial-odometry/log/model.ckpt-10240

@@ -24,4 +24,4 @@ python src/evaluate_model.py \
 --save_depth \
 --output_path /media/nico/46B8200EB81FFB5F/workspace/unsupervised-depth-completion-visual-inertial-odometry/log/output_path \
 --intrinsics_file  /media/nico/46B8200EB81FFB5F/workspace/costar_data/intrinsics/intrinsics.npy \
---restore_path /media/nico/46B8200EB81FFB5F/workspace/unsupervised-depth-completion-visual-inertial-odometry/log/model.ckpt-8990
+--restore_path /media/nico/46B8200EB81FFB5F/workspace/unsupervised-depth-completion-visual-inertial-odometry/log/model.ckpt-10240
