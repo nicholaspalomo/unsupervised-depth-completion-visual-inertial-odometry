@@ -16,7 +16,7 @@ import sklearn
 from sklearn import cluster
 
 # Need to keep track of the frame transformations as the robot moves in order to have the point cloud represented in the same frame
-COSTAR_DATA_DIRPATH = os.path.join(os.path.dirname(__file__), '..', 'costar2.h5')
+COSTAR_DATA_DIRPATH = os.path.join(os.path.dirname(__file__), '..', 'costar.h5')
 DATA_INDEX = 23 # 21, 23, 27, 86, 127
 NUM_DIFF_VECTORS = 10000
 
@@ -101,7 +101,7 @@ def objective(n, V):
 
     return np.sum(np.square(np.matmul(V, n[:, np.newaxis])))
 
-def ransac(lidar, normalized_diff_vectors, lidar_idx, cluster, num_iterations=40, num_points=2, min_inlier_count=10, tol=1e-3, d1=0.02, d2=0.07, debug=True):
+def ransac(lidar, normalized_diff_vectors, lidar_idx, cluster, num_iterations=40, num_points=10, min_inlier_count=10, tol=1e-3, d1=0.02, d2=0.07, debug=True):
     '''
     Inputs:
         cloud - Nx3 point cloud
@@ -189,7 +189,7 @@ def rotmat_a2b(a, b):
 
     return np.matmul(U, V_transpose)
 
-def merge_planes(lidar, planes, ratio=2., min_cluster_size=75, max_dist=0.05, max_angle=30, max_offset=5., debug=True):
+def merge_planes(lidar, planes, ratio=2., min_cluster_size=40, max_dist=0.05, max_angle=30, max_offset=5., debug=True):
     # max_angle given in degrees!
 
     segmented_cloud = []
@@ -294,20 +294,20 @@ def merge_planes(lidar, planes, ratio=2., min_cluster_size=75, max_dist=0.05, ma
                             eigvals, _ = np.linalg.eig(cov)
 
                             if abs(eigvals[2])/(abs(eigvals[1])+0.001) < ratio:
-                                point_cloud = o3d.geometry.PointCloud()
-                                point_cloud.points = o3d.utility.Vector3dVector(candidates)
+                                # point_cloud = o3d.geometry.PointCloud()
+                                # point_cloud.points = o3d.utility.Vector3dVector(candidates)
 
-                                point_cloud.estimate_normals(
-                                    search_param=o3d.geometry.KDTreeSearchParamHybrid(radius=100.0,
-                                    max_nn=100))
+                                # point_cloud.estimate_normals(
+                                #     search_param=o3d.geometry.KDTreeSearchParamHybrid(radius=100.0,
+                                #     max_nn=100))
 
-                                avg_normal = np.mean(np.asarray(point_cloud.normals), axis=0)
-                                avg_normal /= np.linalg.norm(avg_normal)
+                                # avg_normal = np.mean(np.asarray(point_cloud.normals), axis=0)
+                                # avg_normal /= np.linalg.norm(avg_normal)
 
                                 segmented_cloud.append(candidates)
 
                                 segmented_cloud_centers_normals.append(
-                                    np.array([centroid[0], centroid[1], centroid[2], avg_normal[0], avg_normal[1], avg_normal[2]])
+                                    np.array([centroid[0], centroid[1], centroid[2], normal[0], normal[1], normal[2]])
                                 )
 
     # Merge neighboring planes based on heuristic
@@ -325,15 +325,17 @@ def merge_planes(lidar, planes, ratio=2., min_cluster_size=75, max_dist=0.05, ma
         check = np.intersect1d(angle_check, dist_check)
 
         if check.shape[0] > 0:
+            clouds.append({'normal' : np.array([0., 0., 0.]), 'centroid': np.array([0., 0., 0.]), 'points' : np.empty((0, 3))})
             for pc_idx in np.unique(check):
                 if not merged[pc_idx]:
-                    if pc_idx != i:
-                        clouds[len(clouds)-1] = np.vstack((clouds[len(clouds)-1], segmented_cloud[pc_idx]))
-                        merged[pc_idx] = True
-                    else:
-                        clouds.append(segmented_cloud[i])
-                        merged[i] = True
-    
+                    clouds[len(clouds)-1]['points'] = np.vstack((clouds[len(clouds)-1]['points'], segmented_cloud[pc_idx]))
+                    clouds[len(clouds)-1]['centroid'] += segmented_cloud_centers_normals[pc_idx, :3]
+                    clouds[len(clouds)-1]['normal'] += segmented_cloud_centers_normals[pc_idx, 3:]
+                    merged[pc_idx] = True
+            clouds[len(clouds)-1]['centroid'] /= np.unique(check).shape[0]
+            clouds[len(clouds)-1]['normal'] /= np.unique(check).shape[0]
+            clouds[len(clouds)-1]['normal'] /= np.linalg.norm(clouds[len(clouds)-1]['normal'])
+
     return clouds
 
 def plot_pc_over_image(lidar, image, T_velo2cam, K, plane=None):
@@ -468,7 +470,7 @@ def main(debug=True):
 
     colors = ['red', 'green', 'blue']
     for i, cloud in enumerate(segmentation):
-        ax.scatter(cloud[:,0], cloud[:,1], cloud[:,2], color=colors[i % 3])
+        ax.scatter(cloud['points'][:,0], cloud['points'][:,1], cloud['points'][:,2], color=colors[i % 3])
 
     ax.set_xlabel('x')
     ax.set_xlabel('y')
