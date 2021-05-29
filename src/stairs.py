@@ -4,7 +4,7 @@ from matplotlib import pyplot as plt
 import numpy as np
 from scipy.cluster.hierarchy import centroid
 from scipy.interpolate import LinearNDInterpolator, CloughTocher2DInterpolator, griddata
-from scipy.spatial import Delaunay
+from scipy.spatial import Delaunay, ConvexHull
 import h5py
 import os
 import pathlib
@@ -17,7 +17,7 @@ from sklearn import cluster
 
 # Need to keep track of the frame transformations as the robot moves in order to have the point cloud represented in the same frame
 COSTAR_DATA_DIRPATH = os.path.join(os.path.dirname(__file__), '..', 'costar.h5')
-DATA_INDEX = 23 # 21, 23, 27, 86, 127
+DATA_INDEX = 86 # 21, 23, 27, 86, 127
 NUM_DIFF_VECTORS = 10000
 
 # IDEA: Filter out points within X distance of the camera, as these may correspond to the legs
@@ -101,7 +101,7 @@ def objective(n, V):
 
     return np.sum(np.square(np.matmul(V, n[:, np.newaxis])))
 
-def ransac(lidar, normalized_diff_vectors, lidar_idx, cluster, num_iterations=40, num_points=10, min_inlier_count=10, tol=1e-3, d1=0.02, d2=0.07, debug=True):
+def ransac(lidar, normalized_diff_vectors, lidar_idx, cluster, num_iterations=15, num_points=10, min_inlier_count=500, tol=1e-3, d1=0.02, d2=0.07, debug=True):
     '''
     Inputs:
         cloud - Nx3 point cloud
@@ -189,7 +189,7 @@ def rotmat_a2b(a, b):
 
     return np.matmul(U, V_transpose)
 
-def merge_planes(lidar, planes, ratio=2., min_cluster_size=40, max_dist=0.05, max_angle=30, max_offset=5., debug=True):
+def merge_planes(lidar, planes, ratio=2., min_cluster_size=20, max_dist=0.2, max_angle=15, max_offset=5., tol=0.7, num_bins=1000, debug=True):
     # max_angle given in degrees!
 
     segmented_cloud = []
@@ -198,7 +198,7 @@ def merge_planes(lidar, planes, ratio=2., min_cluster_size=40, max_dist=0.05, ma
         cloud = lidar[n['inliers'], :]
 
         # Cut the point cloud into thin slices perpendicular to n, the principal directions of the point cloud
-        bins = np.linspace(-max_offset, max_offset, num=250)
+        bins = np.linspace(-max_offset, max_offset, num=num_bins)
         normal = n['normal']
         R_cloud2normal = rotmat_a2b(normal, np.array([0,0,1]))
         T_cloud2normal = np.eye(4)
@@ -222,6 +222,9 @@ def merge_planes(lidar, planes, ratio=2., min_cluster_size=40, max_dist=0.05, ma
 
                 # Get the points in the slice
                 points_in_slice = cloud[points_above_plane1 & points_below_plane2, :]
+
+                # Remove outliers in slice
+                points_in_slice = points_in_slice[np.linalg.norm(points_in_slice - np.mean(points_in_slice, axis=0), axis=1) < tol, :]
 
                 if points_in_slice.shape[0] >= min_cluster_size:
 
@@ -310,6 +313,9 @@ def merge_planes(lidar, planes, ratio=2., min_cluster_size=40, max_dist=0.05, ma
                                     np.array([centroid[0], centroid[1], centroid[2], normal[0], normal[1], normal[2]])
                                 )
 
+                                # segmented_cloud_centers_normals.append(
+                                #     np.array([centroid[0], centroid[1], centroid[2], avg_normal[0], avg_normal[1], avg_normal[2]]))
+
     # Merge neighboring planes based on heuristic
     segmented_cloud_centers_normals = np.array(segmented_cloud_centers_normals)
     clouds = []
@@ -325,16 +331,36 @@ def merge_planes(lidar, planes, ratio=2., min_cluster_size=40, max_dist=0.05, ma
         check = np.intersect1d(angle_check, dist_check)
 
         if check.shape[0] > 0:
-            clouds.append({'normal' : np.array([0., 0., 0.]), 'centroid': np.array([0., 0., 0.]), 'points' : np.empty((0, 3))})
-            for pc_idx in np.unique(check):
+            flag = False
+            for j, pc_idx in enumerate(np.unique(check)):
                 if not merged[pc_idx]:
+                    if j == 0:
+                        clouds.append({'normal' : np.array([0., 0., 0.]), 'centroid': np.array([0., 0., 0.]), 'points' : np.empty((0, 3)), 'convex_hull' : None})
+                        flag = True
                     clouds[len(clouds)-1]['points'] = np.vstack((clouds[len(clouds)-1]['points'], segmented_cloud[pc_idx]))
-                    clouds[len(clouds)-1]['centroid'] += segmented_cloud_centers_normals[pc_idx, :3]
                     clouds[len(clouds)-1]['normal'] += segmented_cloud_centers_normals[pc_idx, 3:]
                     merged[pc_idx] = True
-            clouds[len(clouds)-1]['centroid'] /= np.unique(check).shape[0]
-            clouds[len(clouds)-1]['normal'] /= np.unique(check).shape[0]
-            clouds[len(clouds)-1]['normal'] /= np.linalg.norm(clouds[len(clouds)-1]['normal'])
+            
+            if flag:
+                clouds[len(clouds)-1]['normal'] /= np.unique(check).shape[0]
+                clouds[len(clouds)-1]['normal'] /= np.linalg.norm(clouds[len(clouds)-1]['normal'])
+
+                # 1. Project points in cluster onto their plane
+                # Transform points into the plane frame
+                R_I2N = rotmat_a2b(clouds[len(clouds)-1]['normal'], np.array([0,0,1]))
+                points_N = clouds[len(clouds)-1]['points'].copy()
+                points_N = np.matmul(points_N, R_I2N.T)
+
+                # 2. Compute the convex hull of the points
+                hull = ConvexHull(points_N[:, :2])
+                # Tranform the hull back to the inertial frame
+                hull_I = points_N[hull.vertices,:]
+                hull_I = np.vstack((hull_I, hull_I[0, :]))
+                hull_I[:, 2] = np.mean(points_N[:, 2])
+                hull_I = np.matmul(hull_I, R_I2N)
+
+                clouds[len(clouds)-1]['convex_hull'] = hull_I
+                clouds[len(clouds)-1]['centroid'] = np.matmul(R_I2N, np.mean(points_N, axis=0)[:, np.newaxis]).squeeze()
 
     return clouds
 
@@ -447,7 +473,7 @@ def main(debug=True):
         T_velo2cam = np.reshape(hf['lidar']['tf_velo2cam'][:], (4,4))
         K = np.reshape(hf['image']['intrinsics'], (3,3))
 
-    lidar = plot_pc_over_image(lidar, image, T_velo2cam, K)
+    # lidar = plot_pc_over_image(lidar, image, T_velo2cam, K)
 
     # Get normalized difference vectors
     normalized_diff_vectors, lidar_idx, neighbors, clusters = get_normalized_diff_vectors(lidar, debug=False)
@@ -455,21 +481,38 @@ def main(debug=True):
     # Apply RANSAC to get plane normals
     # Get the plane origins, normals, and dimensions (convex hull)
     planes = ransac(lidar, normalized_diff_vectors, lidar_idx, clusters)
-    for plane in planes:
-        cloud = lidar[plane['inliers'], :]
-        _ = plot_pc_over_image(cloud, image, T_velo2cam, K, plane=plane)
+    # for plane in planes:
+    #     cloud = lidar[plane['inliers'], :]
+    #     _ = plot_pc_over_image(cloud, image, T_velo2cam, K, plane=plane)
 
     # Merge neighboring planes
     segmentation = merge_planes(lidar, planes, debug=False)
 
-    # Plot segmentation results
+    # Plot clustered point clouds from segmentation results
+    # fig = plt.figure()
+    # plt.cla()
+    # plt.clf()
+    # ax = fig.add_subplot(projection='3d')
+
+    colors = ['r', 'g', 'b']
+    # for i, cloud in enumerate(segmentation):
+    #     ax.scatter(cloud['points'][:,0], cloud['points'][:,1], cloud['points'][:,2], color=colors[i % 3])
+
+    # ax.set_xlabel('x')
+    # ax.set_xlabel('y')
+    # ax.set_xlabel('z')
+
+    # plt.show()
+    # plt.close(fig)
+
+    # Plot convex hull of planes from segmentation results
     fig = plt.figure()
     plt.cla()
     plt.clf()
     ax = fig.add_subplot(projection='3d')
-
-    colors = ['red', 'green', 'blue']
     for i, cloud in enumerate(segmentation):
+
+        plt.plot(cloud['convex_hull'][:,0], cloud['convex_hull'][:,1], cloud['convex_hull'][:,2], colors[i % 3]+'-', lw=2)
         ax.scatter(cloud['points'][:,0], cloud['points'][:,1], cloud['points'][:,2], color=colors[i % 3])
 
     ax.set_xlabel('x')
