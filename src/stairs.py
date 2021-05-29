@@ -189,7 +189,7 @@ def rotmat_a2b(a, b):
 
     return np.matmul(U, V_transpose)
 
-def merge_planes(lidar, planes, ratio=2., min_cluster_size=20, max_dist=0.2, max_angle=15, max_offset=5., tol=0.7, num_bins=1000, debug=True):
+def merge_planes(lidar, planes, ratio=2., min_cluster_size=20, max_dist=0.05, max_angle=15, max_offset=5., tol=0.7, num_bins=1000, debug=True):
     # max_angle given in degrees!
 
     segmented_cloud = []
@@ -292,7 +292,7 @@ def merge_planes(lidar, planes, ratio=2., min_cluster_size=20, max_dist=0.2, max
                     for j, centroid in enumerate(kmeans.cluster_centers_):
                         # Reject the plane segments that do not satisfy eigenvalue criterion
                         candidates = points_in_slice[kmeans.labels_ == j, :]
-                        if candidates.shape[0] > 1:
+                        if candidates.shape[0] > 2:
                             cov = np.cov(candidates.transpose())
                             eigvals, _ = np.linalg.eig(cov)
 
@@ -473,7 +473,7 @@ def main(debug=True):
         T_velo2cam = np.reshape(hf['lidar']['tf_velo2cam'][:], (4,4))
         K = np.reshape(hf['image']['intrinsics'], (3,3))
 
-    # lidar = plot_pc_over_image(lidar, image, T_velo2cam, K)
+    _ = plot_pc_over_image(lidar, image, T_velo2cam, K)
 
     # Get normalized difference vectors
     normalized_diff_vectors, lidar_idx, neighbors, clusters = get_normalized_diff_vectors(lidar, debug=False)
@@ -513,7 +513,7 @@ def main(debug=True):
     for i, cloud in enumerate(segmentation):
 
         plt.plot(cloud['convex_hull'][:,0], cloud['convex_hull'][:,1], cloud['convex_hull'][:,2], colors[i % 3]+'-', lw=2)
-        ax.scatter(cloud['points'][:,0], cloud['points'][:,1], cloud['points'][:,2], color=colors[i % 3])
+        # ax.scatter(cloud['points'][:,0], cloud['points'][:,1], cloud['points'][:,2], color=colors[i % 3])
 
     ax.set_xlabel('x')
     ax.set_xlabel('y')
