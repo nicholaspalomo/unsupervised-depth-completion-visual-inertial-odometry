@@ -279,8 +279,9 @@ def merge_planes(lidar, planes, ratio=2., min_cluster_size=20, max_dist=0.05, ma
                         ax.set_xlabel('y')
                         ax.set_xlabel('z')
 
-                        plt.show(block=False)
-                        plt.pause(1.5)
+                        # plt.show(block=False)
+                        # plt.pause(1.5)
+                        plt.show()
                         plt.close(fig)
 
                     # Get the number of clusters based on the minimum number of points in a plane
@@ -486,7 +487,7 @@ def main(debug=True):
     #     _ = plot_pc_over_image(cloud, image, T_velo2cam, K, plane=plane)
 
     # Merge neighboring planes
-    segmentation = merge_planes(lidar, planes, debug=False)
+    segmentation = merge_planes(lidar, planes, debug=True)
 
     # Plot clustered point clouds from segmentation results
     # fig = plt.figure()

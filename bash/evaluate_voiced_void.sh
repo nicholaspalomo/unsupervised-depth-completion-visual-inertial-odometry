@@ -7,7 +7,7 @@ python src/evaluate_model.py \
 --interp_depth_path /media/nico/46B8200EB81FFB5F/workspace/costar_data/validation/interp_depth/costar_val_interp_depth.txt \
 --validity_map_path /media/nico/46B8200EB81FFB5F/workspace/costar_data/validation/validity_map/costar_val_validity_map.txt \
 --ground_truth_path /media/nico/46B8200EB81FFB5F/workspace/costar_data/validation/sparse_depth/costar_val_sparse_depth.txt \
---start_idx 63 \
+--start_idx 0 \
 --end_idx 80 \
 --n_batch 1 \
 --n_height 240 \

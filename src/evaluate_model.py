@@ -28,15 +28,22 @@ import open3d as o3d
 import matplotlib.pyplot as plt
 import time
 
-def make_mean_abs_err_plot(z, z_gt, K, img):
-
+def make_mean_abs_err_plot(z, gt, vm):
     # compute SE and graph
-    se = np.abs(z_gt - np.squeeze(z)) * settings.MAX_Z
+    z_gt = gt.copy()
+    for k in range(z.shape[0]):
+        for i in range(z.shape[1]):
+            for j in range(z.shape[2]):
+                if vm[k, i, j] < 1:
+                    z_gt[k, i, j] = np.nan
+                
+    se = np.abs(z_gt - z[:, :, :, 0]) * settings.MAX_Z
     graph = []
-    for i in range(se.shape[0]):
-        for j in range(se.shape[1]):
-            if ~np.isnan(se[i, j]):
-                graph.append([z_gt[i, j], se[i, j], i, j]) # x, y
+    for k in range(se.shape[0]):
+        for i in range(se.shape[1]):
+            for j in range(se.shape[2]):
+                if ~np.isnan(se[k, i, j]):
+                    graph.append([z_gt[k, i, j], se[k, i, j], i, j]) # x, y
     graph = np.array(graph)
     idx_sort = np.argsort(graph[:, 0])
     graph = graph[idx_sort, :]
@@ -64,6 +71,13 @@ def make_mean_abs_err_plot(z, z_gt, K, img):
     plt.legend(['mean absolute estimation error [m]', 'error bounds [m]', 'depth distribution [%]'])
     plt.show()
     plt.close()
+
+    return graph
+
+
+def plot_error_map(z, z_gt, img, vm):
+
+    graph = make_mean_abs_err_plot(z, z_gt, vm)
 
     # make error map
     rgb = plt.cm.get_cmap('jet')
@@ -136,7 +150,7 @@ def plot_point_cloud(z, gt, vm, img_path, intrinsics_path):
                 z_gt[i, j] = np.nan
     make_cloud_visualization(img, z_gt, K)
 
-    make_mean_abs_err_plot(z, z_gt, K, img)
+    # plot_error_map(z, z_gt, img, vm)
 
 parser = argparse.ArgumentParser()
 
@@ -298,6 +312,18 @@ with tf.Graph().as_default():
       break
 
   print("Averaged elapsed inferencing time: {}".format(avg_time / step))
+
+  # Get the absolute mean error, aggregated over all the validation data
+  gt = []
+  vm = []
+  for idx in range(n_step*args.n_batch):
+      gt_idx, vm_idx = data_utils.load_depth_with_validity_map(gt_paths[idx])
+      gt.append(gt_idx)
+      vm.append(vm_idx)
+  gt = np.array(gt)
+  vm = np.array(vm)
+
+  make_mean_abs_err_plot(z_arr, gt, vm)
 
   # Remove the padded examples
   z_arr = z_arr[0:n_sample, ...]
